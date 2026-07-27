@@ -6,7 +6,7 @@ Phase 00 — Governance and Repository Foundation.
 
 ## Current task
 
-`P00-T03` — xác minh GitHub Actions CI sau authorization commit/push.
+`P00-T08` — thiết lập config startup validation và secret-safe baseline.
 
 ## Completed
 
@@ -21,12 +21,12 @@ Phase 00 — Governance and Repository Foundation.
 - P00-T16 đã hoàn tất: `DEC-009` phê duyệt as-is Project Scope, Business Rules và Entity Lifecycles; ACH-001/002 achieved và BLK-004 resolved.
 - P00-T01 đã hoàn tất: tạo `PewPew.sln` với 10 project `PewPew.*`, giữ core `net10.0`, Desktop/DeviceAgent `net10.0-windows`, Avalonia 12.1.0 chỉ tại Desktop; clean Release build PASS (0 warning/error) và reference graph khớp DR matrix.
 - P00-T02 đã hoàn tất: `tests/PewPew.Architecture.Tests` kiểm tra DR-001, DR-002, DR-005 và DR-011 trên project graph thật; Release suite PASS 2/2 và negative fixture bị bắt.
+- P00-T04 đã hoàn tất: `.editorconfig`, `Directory.Build.props` và `docs/05-quality/CODING_CONVENTIONS.md` chốt analyzer/warning policy; formatter PASS, Release build 0 warning/error, architecture tests 2/2 PASS và CI-equivalent PASS. Hai test method CA1707 được sửa theo policy thay vì suppress.
 - P00-T03 implementation đã sẵn sàng verify: `.github/workflows/ci.yml` chạy Windows restore/build/test với `contents: read`; local equivalent PASS và simulated failure exit 1. GitHub run chưa thể tạo khi không có commit/push authorization.
 
 ## Not completed
 
-- Local Git repository chưa có commit nền.
-- GitHub Actions run thực tế cho P00-T03 chưa có evidence vì repository chưa có commit baseline và không tự push.
+- P00-T08 và các task governance còn lại chưa triển khai.
 
 ## Known blockers
 
@@ -35,7 +35,7 @@ Xem `.ai/BLOCKERS.md`. Readiness hiện trả `IMPLEMENTATION_READY=NO`.
 ## Read next
 
 1. `.ai/NEXT_ACTION.md`
-2. `plans/phase-00-governance/tasks/P00-T03.md`
-3. `.github/workflows/ci.yml`
-4. `scripts/Invoke-Ci.ps1`
+2. `plans/phase-00-governance/tasks/P00-T08.md`
+3. `docs/05-quality/SECURITY_CHECKLIST.md`
+4. `docs/02-architecture/DEPENDENCY_RULES.md`
 5. `docs/07-release/GIT_FLOW.md`

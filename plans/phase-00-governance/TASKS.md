@@ -9,11 +9,11 @@ Mỗi dòng dưới đây là một outcome độc lập, mục tiêu hoàn thà
 | [P00-T01](tasks/P00-T01.md) | 1–2d | DONE | Solution có đúng project và reference graph tối thiểu | P00-T07 | Clean Release build PASS (0 warning/error); `dotnet list ... reference` khớp DR matrix |
 | [P00-T02](tasks/P00-T02.md) | 1d | DONE | Architecture tests bảo vệ dependency cốt lõi | P00-T01 | Release `dotnet test` PASS (2/2); negative DR-002 fixture bị bắt |
 | [P00-T03](tasks/P00-T03.md) | 1d | VERIFY | CI tự động restore/build/test | P00-T01 | Local CI equivalent PASS; simulated failure exit 1; chờ GitHub Actions run sau commit/push được duyệt |
-| [P00-T04](tasks/P00-T04.md) | 0.5–1d | BACKLOG | Coding/analyzer/warning convention được chốt | P00-T07 | Approved config/doc; analyzer run có evidence |
+| [P00-T04](tasks/P00-T04.md) | 0.5–1d | DONE | Coding/analyzer/warning convention được chốt | P00-T07 | `CODING_CONVENTIONS.md`; format PASS; Release analyzer build PASS (0 warning/error); tests 2/2 PASS |
 | [P00-T05](tasks/P00-T05.md) | 0.5d | DONE | Phase-aligned Git/release workflow được phê duyệt | None | `DEC-006` accepted; central + 8 phase flows; validator pass |
 | [P00-T06](tasks/P00-T06.md) | 1d | DONE | Execution roadmap P00–P07 có phase gates | None | 9 plan files; link/ID/AC validator pass |
 | [P00-T07](tasks/P00-T07.md) | 1–2d | DONE | Target framework, desktop UI và namespace được quyết định | None | `ADR-008`; BLK-001..003 resolved |
-| [P00-T08](tasks/P00-T08.md) | 1d | BACKLOG | Config startup validation và secret-safe baseline hoạt động | P00-T01, P00-T07 | Invalid config fail closed; secret scan pass |
+| [P00-T08](tasks/P00-T08.md) | 1d | READY | Config startup validation và secret-safe baseline hoạt động | P00-T01, P00-T07 | Invalid config fail closed; secret scan pass |
 | [P00-T09](tasks/P00-T09.md) | 1d | BACKLOG | CI chặn dependency/secret violation | P00-T02, P00-T03, P00-T08 | Negative fixtures làm gate fail |
 | [P00-T10](tasks/P00-T10.md) | 1–2d | BACKLOG | Wake-word/local-tool uncertainty có spike report | P00-T07 | Timebox, benchmark thô, no production claim |
 | [P00-T11](tasks/P00-T11.md) | 1d | DONE | Mỗi phase có small-task backlog thực thi được | P00-T06 | 8 `TASKS.md`; IDs/size/status/dependency/link pass |

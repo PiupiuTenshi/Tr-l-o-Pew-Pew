@@ -5,7 +5,7 @@ namespace PewPew.Architecture.Tests;
 public sealed class ProjectReferenceArchitectureTests
 {
     [Fact]
-    public void Solution_project_graph_obeys_core_dependency_rules()
+    public void SolutionProjectGraphObeysCoreDependencyRules()
     {
         var violations = ArchitectureRuleValidator.Validate(
             ArchitectureRuleValidator.LoadProjects(GetSolutionProjectFiles()));
@@ -14,7 +14,7 @@ public sealed class ProjectReferenceArchitectureTests
     }
 
     [Fact]
-    public void Negative_fixture_is_rejected_when_application_references_infrastructure()
+    public void NegativeFixtureIsRejectedWhenApplicationReferencesInfrastructure()
     {
         var fixtureDirectory = Path.Combine(
             FindRepositoryRoot(),

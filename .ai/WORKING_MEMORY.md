@@ -40,7 +40,7 @@
 - P00-T01 tạo `PewPew.sln`, 10 project skeleton và pin Avalonia 12.1.0 tại `PewPew.Desktop`; một clean build trong sandbox bị chặn vì Avalonia ghi telemetry ngoài workspace, build lại ngoài sandbox PASS.
 - User yêu cầu workflow UI như web; root dev launcher cho phép chạy từ root bằng `dotnet watch run`. Command đã khởi động được `PewPew.exe`; UI/app feature vẫn thuộc phase sau.
 - P00-T02 thêm xUnit v3 architecture test project; Release suite PASS 2/2, gồm positive graph và negative fixture Application → Infrastructure bị DR-002 bắt.
-- P00-T03 thêm CI chỉ có `contents: read`, checkout, .NET setup, restore/build/test. Workflow validator và local equivalent PASS; simulated failure exit 1; không tự commit/push để tạo GitHub run.
+- P00-T04 chốt `.editorconfig`, .NET analyzers `latest-recommended` và warnings-as-errors qua `Directory.Build.props`; formatter PASS, Release build PASS (0 warning/error), architecture tests 2/2 PASS và CI-equivalent PASS. Hai test method vi phạm CA1707 được đổi sang PascalCase, không suppress analyzer.
 
 ## Context to preserve
 

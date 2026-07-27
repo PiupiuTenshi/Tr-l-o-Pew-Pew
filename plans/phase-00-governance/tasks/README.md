@@ -8,11 +8,11 @@ Task specifications cho P00 — Governance and Repository Foundation. Phase scop
 | [P00-T01](P00-T01.md) | Tạo solution skeleton và project references tối thiểu | 1–2d | Must | DONE | P00-T07 |
 | [P00-T02](P00-T02.md) | Thêm architecture tests cho DR-001, DR-002, DR-005, DR-011 | 1d | Must | DONE | P00-T01 |
 | [P00-T03](P00-T03.md) | Thiết lập CI restore/build/test | 1d | Must | VERIFY | P00-T01 |
-| [P00-T04](P00-T04.md) | Chốt coding conventions, analyzer và warning policy | 0.5–1d | Should | BACKLOG | P00-T07 |
+| [P00-T04](P00-T04.md) | Chốt coding conventions, analyzer và warning policy | 0.5–1d | Should | DONE | P00-T07 |
 | [P00-T05](P00-T05.md) | Chốt phase-aligned Git/release flow và gắn vào task specs | 0.5d | Should | DONE | None |
 | [P00-T06](P00-T06.md) | Chuẩn hóa execution roadmap và phase plans | 1d | Must | DONE | None |
 | [P00-T07](P00-T07.md) | Giải quyết target framework, desktop UI và root namespace | 1–2d | Must | DONE | None |
-| [P00-T08](P00-T08.md) | Thiết lập configuration validation và secret-safe development baseline | 1d | Must | BACKLOG | P00-T01, P00-T07 |
+| [P00-T08](P00-T08.md) | Thiết lập configuration validation và secret-safe development baseline | 1d | Must | READY | P00-T01, P00-T07 |
 | [P00-T09](P00-T09.md) | Bổ sung CI architecture/security gates | 1d | Must | BACKLOG | P00-T02, P00-T03, P00-T08 |
 | [P00-T10](P00-T10.md) | Thực hiện spike wake-word/local tool call có timebox để giảm uncertainty | 1–2d | Should | BACKLOG | P00-T07 |
 | [P00-T11](P00-T11.md) | Chuẩn hóa task template, Definition of Ready và evidence path | 1d | Must | DONE | P00-T06 |

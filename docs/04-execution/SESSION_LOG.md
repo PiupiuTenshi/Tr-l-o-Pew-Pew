@@ -436,3 +436,29 @@
 
 **Status / next action:**
 - P00-T03 ở `VERIFY`, không `DONE` cho đến khi có GitHub Actions URL/status PASS sau authorization commit/push.
+
+---
+
+## 2026-07-28 — Codex — P00-T04
+
+**Goal:** Chốt coding convention, analyzer và warning policy có thể thực thi.
+
+**Changes:**
+
+- Added root `.editorconfig` for UTF-8/LF, indentation and C# style conventions.
+- Updated `Directory.Build.props`: built-in .NET analyzers use `latest-recommended`; code style runs in build; compiler and analyzer warnings are errors.
+- Added `docs/05-quality/CODING_CONVENTIONS.md` with no-broad-suppression policy and required local checks.
+- Renamed two architecture-test methods to PascalCase to resolve `CA1707`; no analyzer suppression was introduced.
+
+**Verification:**
+
+- `dotnet format whitespace PewPew.sln --verify-no-changes --no-restore` → PASS.
+- `dotnet build PewPew.sln --configuration Release --nologo` → PASS, 0 warnings, 0 errors.
+- `dotnet test PewPew.sln --configuration Release --no-build --nologo` → PASS, 2/2.
+- `scripts/Invoke-Ci.ps1` → PASS, Release build 0 warnings/errors and tests 2/2.
+- `Test-ManagementStructure.ps1`, `Test-TaskGitFlow.ps1`, `Test-ProjectPrompts.ps1` → PASS.
+
+**Status / next action:**
+
+- `P00-T04` is `DONE` with analyzer/build/test evidence.
+- `P00-T08` is the next `READY` Must task.

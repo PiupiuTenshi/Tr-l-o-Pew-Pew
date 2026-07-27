@@ -35,7 +35,7 @@ flowchart LR
 | [P00-T01](tasks/P00-T01.md) | `chore/p00-t01-tao-solution-skeleton-va-project-references` | `phase/p00-governance` | Clean Release build PASS (0 warning/error); `dotnet list ... reference` khớp DR matrix |
 | [P00-T02](tasks/P00-T02.md) | `test/p00-t02-them-architecture-tests-cho-dr-001-dr-002-dr` | `phase/p00-governance` | Release `dotnet test` PASS (2/2); negative DR-002 fixture bị bắt |
 | [P00-T03](tasks/P00-T03.md) | `test/p00-t03-thiet-lap-ci-restore-build-test` | `phase/p00-governance` | Local CI equivalent PASS; simulated failure exit 1; chờ GitHub Actions run sau commit/push được duyệt |
-| [P00-T04](tasks/P00-T04.md) | `docs/p00-t04-chot-coding-conventions-analyzer-va-warning` | `phase/p00-governance` | Approved config/doc; analyzer run có evidence |
+| [P00-T04](tasks/P00-T04.md) | `docs/p00-t04-chot-coding-conventions-analyzer-va-warning` | `phase/p00-governance` | `CODING_CONVENTIONS.md`; format PASS; Release analyzer build PASS (0 warning/error); tests 2/2 PASS |
 | [P00-T05](tasks/P00-T05.md) | `docs/p00-t05-chot-phase-aligned-git-release-flow-va-gan-vao` | `phase/p00-governance` | `DEC-006` accepted; central + 8 phase flows; validator pass |
 | [P00-T06](tasks/P00-T06.md) | `docs/p00-t06-chuan-hoa-execution-roadmap-va-phase-plans` | `phase/p00-governance` | 9 plan files; link/ID/AC validator pass |
 | [P00-T07](tasks/P00-T07.md) | `docs/p00-t07-giai-quyet-target-framework-desktop-ui-va-root` | `phase/p00-governance` | `ADR-008`; BLK-001..003 resolved |
