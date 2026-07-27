@@ -11,7 +11,7 @@
 - Project Scope, Business Rules và Entity Lifecycles là approved baselines theo `DEC-009`/`ADR-009`.
 - Execution roadmap P00–P07 có 123 Task ID duy nhất; mỗi task có size tối đa 2 ngày, status, dependency, explicit mode/risk và acceptance/evidence.
 - 123 generated task specifications, 8 task indexes và 8 phase Git flow views đồng bộ với phase sources.
-- `P00-T01`, `P00-T02`, `P00-T15`, `P00-T07`, `P00-T16` và `P00-T05` đã hoàn tất; `P00-T03` đang `VERIFY`, chờ GitHub Actions evidence.
+- `P00-T01`, `P00-T02`, `P00-T03`, `P00-T15`, `P00-T07`, `P00-T16` và `P00-T05` đã hoàn tất; `P00-T04` đang `READY`.
 - P00-T01 clean Release build PASS (0 warning/error); reference graph đã kiểm tra bằng `dotnet list ... reference`.
 - Readiness vẫn chưa đủ do architecture tests, CI và secret/config baseline chưa có.
 
@@ -40,7 +40,7 @@
 - P00-T01 tạo `PewPew.sln`, 10 project skeleton và pin Avalonia 12.1.0 tại `PewPew.Desktop`; một clean build trong sandbox bị chặn vì Avalonia ghi telemetry ngoài workspace, build lại ngoài sandbox PASS.
 - User yêu cầu workflow UI như web; root dev launcher cho phép chạy từ root bằng `dotnet watch run`. Command đã khởi động được `PewPew.exe`; UI/app feature vẫn thuộc phase sau.
 - P00-T02 thêm xUnit v3 architecture test project; Release suite PASS 2/2, gồm positive graph và negative fixture Application → Infrastructure bị DR-002 bắt.
-- P00-T03 thêm CI chỉ có `contents: read`, checkout, .NET setup, restore/build/test. Workflow validator và local equivalent PASS; simulated failure exit 1; không tự commit/push để tạo GitHub run.
+- P00-T03 thêm CI chỉ có `contents: read`, checkout, .NET setup, restore/build/test. Workflow validator và local equivalent PASS; simulated failure exit 1; GitHub Actions run [#30296312267](https://github.com/PiupiuTenshi/Tr-l-o-Pew-Pew/actions/runs/30296312267) PASS trên `windows-latest`.
 
 ## Context to preserve
 

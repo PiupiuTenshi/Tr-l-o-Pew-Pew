@@ -2,47 +2,47 @@
 
 ## Task
 
-`P00-T03` — xác minh GitHub Actions CI sau khi commit/push được Product Owner cho phép.
+`P00-T04` — chốt coding/analyzer/warning conventions.
 
 ## Goal
 
-Lấy evidence GitHub Actions cho workflow restore → Release build → test đã được tạo; chỉ thực hiện commit/push khi có authorization rõ ràng.
+Thiết lập convention có thể thực thi cho code style, analyzers và policy warnings, không mở rộng product scope hoặc thay đổi kiến trúc.
 
 ## Start here
 
-`plans/phase-00-governance/tasks/P00-T03.md`
+`plans/phase-00-governance/tasks/P00-T04.md`
 
 ## Read first
 
-- `plans/phase-00-governance/tasks/P00-T03.md`
-- `PewPew.sln`
-- `tests/PewPew.Architecture.Tests/`
+- `plans/phase-00-governance/tasks/P00-T04.md`
+- `docs/05-quality/QUALITY_GATES.md`
+- `docs/02-architecture/DEPENDENCY_RULES.md`
 
 ## Steps
 
-1. Xác nhận Product Owner cho phép tạo commit/task branch và push lên `origin`.
-2. Đẩy workflow cùng source hiện tại theo Git contract.
-3. Quan sát GitHub Actions `CI` run và lưu URL/status PASS.
-4. Chỉ sau evidence đó mới chuyển P00-T03 thành `DONE`.
+1. Reconcile coding/analyzer/warning convention với `DEC-008` và quality gates.
+2. Chỉ thêm configuration/documentation cần thiết trong scope task.
+3. Chạy analyzer/build evidence phù hợp; không tắt warning hoặc gate để vượt lỗi.
+4. Đồng bộ task board, session log, working memory và handoff.
 
 ## Acceptance criteria
 
-- Workflow chứa restore, Release build và test steps; local equivalent PASS.
-- Simulated failure trả exit 1.
-- GitHub Actions clean run còn pending authorization.
+- Convention có owner và scope rõ.
+- Analyzer/build evidence được lưu hoặc N/A có lý do.
+- Không có suppression/security exception ngoài scope.
 
 ## Expected evidence
 
-- `scripts/Test-CiWorkflow.ps1` PASS.
-- `scripts/Invoke-Ci.ps1` PASS; `-SimulateFailure` exit 1.
-- GitHub Actions run URL/status sau authorization.
+- Configuration/documentation diff rõ ràng.
+- Analyzer/build command cùng PASS/FAIL thực tế.
+- Task board và session evidence.
 
 ## Known constraints
 
-- `DEC-006`, `DEC-008` và `DEC-009` đã accepted; P00-T01 và P00-T02 đã có Release build/test evidence.
-- Git local có nhánh `main` nhưng chưa có commit; không tự commit/push.
+- `DEC-006`, `DEC-008` và `DEC-009` đã accepted; P00-T01 đến P00-T03 đã có evidence.
+- Git baseline `77401bc` đã push lên `origin/main`; P00 phase/task branch đã tồn tại.
 - `PewPew.sln` gồm root launcher, 10 source project và 1 architecture-test project.
 
 ## Stop condition
 
-Dừng nếu CI cần secret, deployment, external paid service, thay đổi branch protection hoặc security exception; không push khi chưa có authorization.
+Dừng nếu cần nới warning/security policy, thay đổi public contract/architecture, secret thật hoặc package/license chưa được duyệt.

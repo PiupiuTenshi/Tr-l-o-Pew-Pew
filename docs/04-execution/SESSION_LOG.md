@@ -436,3 +436,23 @@
 
 **Status / next action:**
 - P00-T03 ở `VERIFY`, không `DONE` cho đến khi có GitHub Actions URL/status PASS sau authorization commit/push.
+
+---
+
+## 2026-07-28 — Codex — P00-T03 GitHub CI verification
+
+**Git evidence:**
+
+- Baseline `77401bc` (`chore(repo): establish initial P00 baseline`) pushed to `origin/main`.
+- Phase branch `phase/p00-governance` and task branch `test/p00-t03-thiet-lap-ci-restore-build-test` created and pushed.
+- Verification commit `bd2beb0` triggered GitHub Actions CI.
+
+**Verification:**
+
+- GitHub Actions [CI run #30296312267](https://github.com/PiupiuTenshi/Tr-l-o-Pew-Pew/actions/runs/30296312267) on `windows-latest` → **PASS**.
+- Job `Restore, build, and test` completed in 1m07s; checkout, .NET SDK setup, restore, Release build and tests all passed.
+
+**Status / next action:**
+
+- `P00-T03` is `DONE` with local and hosted CI evidence.
+- `P00-T04` is the next `READY` task.

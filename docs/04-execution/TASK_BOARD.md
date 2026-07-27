@@ -18,8 +18,8 @@ Board này theo dõi task của current phase. Global backlog và task specifica
 |---|---|---|---|---|---|---|
 | P00-T01 | Tạo solution skeleton | 00 | Must | DONE | P00-T07 | Clean Release build PASS (0 warning/error); reference graph verified |
 | P00-T02 | Thêm architecture tests | 00 | Must | DONE | P00-T01 | Release `dotnet test` PASS (2/2); negative fixture caught |
-| P00-T03 | Thiết lập CI build/test | 00 | Must | VERIFY | P00-T01 | Local CI PASS; simulated failure exit 1; GitHub run pending authorization |
-| P00-T04 | Chốt coding conventions | 00 | Should | BACKLOG | P00-T07 | Approved document |
+| P00-T03 | Thiết lập CI build/test | 00 | Must | DONE | P00-T01 | Local CI PASS; simulated failure exit 1; GitHub Actions #30296312267 PASS |
+| P00-T04 | Chốt coding conventions | 00 | Should | READY | P00-T07 | Approved document; analyzer run pending |
 | P00-T05 | Chốt phase-aligned release and Git flow | 00 | Should | DONE | None | `DEC-006` accepted; central + 8 phase flows; validator PASS |
 | P00-T06 | Chuẩn hóa execution roadmap và phase plans | 00 | Must | DONE | None | 9 plan files; 119 unique task IDs; links/AC coverage PASS |
 | P00-T07 | Chốt target framework, desktop UI và root namespace | 00 | Must | DONE | None | `ADR-008`; BLK-001..003 resolved |

@@ -8,8 +8,8 @@ Mỗi dòng dưới đây là một outcome độc lập, mục tiêu hoàn thà
 |---|---:|---|---|---|---|
 | [P00-T01](tasks/P00-T01.md) | 1–2d | DONE | Solution có đúng project và reference graph tối thiểu | P00-T07 | Clean Release build PASS (0 warning/error); `dotnet list ... reference` khớp DR matrix |
 | [P00-T02](tasks/P00-T02.md) | 1d | DONE | Architecture tests bảo vệ dependency cốt lõi | P00-T01 | Release `dotnet test` PASS (2/2); negative DR-002 fixture bị bắt |
-| [P00-T03](tasks/P00-T03.md) | 1d | VERIFY | CI tự động restore/build/test | P00-T01 | Local CI equivalent PASS; simulated failure exit 1; chờ GitHub Actions run sau commit/push được duyệt |
-| [P00-T04](tasks/P00-T04.md) | 0.5–1d | BACKLOG | Coding/analyzer/warning convention được chốt | P00-T07 | Approved config/doc; analyzer run có evidence |
+| [P00-T03](tasks/P00-T03.md) | 1d | DONE | CI tự động restore/build/test | P00-T01 | Local CI equivalent PASS; simulated failure exit 1; [GitHub Actions #30296312267](https://github.com/PiupiuTenshi/Tr-l-o-Pew-Pew/actions/runs/30296312267) PASS |
+| [P00-T04](tasks/P00-T04.md) | 0.5–1d | READY | Coding/analyzer/warning convention được chốt | P00-T07 | Approved config/doc; analyzer run có evidence |
 | [P00-T05](tasks/P00-T05.md) | 0.5d | DONE | Phase-aligned Git/release workflow được phê duyệt | None | `DEC-006` accepted; central + 8 phase flows; validator pass |
 | [P00-T06](tasks/P00-T06.md) | 1d | DONE | Execution roadmap P00–P07 có phase gates | None | 9 plan files; link/ID/AC validator pass |
 | [P00-T07](tasks/P00-T07.md) | 1–2d | DONE | Target framework, desktop UI và namespace được quyết định | None | `ADR-008`; BLK-001..003 resolved |

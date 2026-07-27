@@ -7,8 +7,8 @@ Task specifications cho P00 — Governance and Repository Foundation. Phase scop
 |---|---|---:|---|---|---|
 | [P00-T01](P00-T01.md) | Tạo solution skeleton và project references tối thiểu | 1–2d | Must | DONE | P00-T07 |
 | [P00-T02](P00-T02.md) | Thêm architecture tests cho DR-001, DR-002, DR-005, DR-011 | 1d | Must | DONE | P00-T01 |
-| [P00-T03](P00-T03.md) | Thiết lập CI restore/build/test | 1d | Must | VERIFY | P00-T01 |
-| [P00-T04](P00-T04.md) | Chốt coding conventions, analyzer và warning policy | 0.5–1d | Should | BACKLOG | P00-T07 |
+| [P00-T03](P00-T03.md) | Thiết lập CI restore/build/test | 1d | Must | DONE | P00-T01 |
+| [P00-T04](P00-T04.md) | Chốt coding conventions, analyzer và warning policy | 0.5–1d | Should | READY | P00-T07 |
 | [P00-T05](P00-T05.md) | Chốt phase-aligned Git/release flow và gắn vào task specs | 0.5d | Should | DONE | None |
 | [P00-T06](P00-T06.md) | Chuẩn hóa execution roadmap và phase plans | 1d | Must | DONE | None |
 | [P00-T07](P00-T07.md) | Giải quyết target framework, desktop UI và root namespace | 1–2d | Must | DONE | None |
