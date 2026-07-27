@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>PewPew.Api</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../PewPew.Application/PewPew.Application.csproj" />
+    <ProjectReference Include="../PewPew.Contracts/PewPew.Contracts.csproj" />
+    <ProjectReference Include="../PewPew.Infrastructure/PewPew.Infrastructure.csproj" />
+    <ProjectReference Include="../PewPew.Persistence/PewPew.Persistence.csproj" />
+  </ItemGroup>
+</Project>
