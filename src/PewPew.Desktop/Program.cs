@@ -1,4 +1,5 @@
 using Avalonia;
+using PewPew.SharedKernel.Configuration;
 
 namespace PewPew.Desktop;
 
@@ -11,7 +12,11 @@ internal static class Program
 public static class DesktopHost
 {
     [STAThread]
-    public static void Start(string[] args) => BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    public static void Start(string[] args)
+    {
+        _ = StartupConfiguration.LoadFromEnvironment();
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     private static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<DesktopApp>().UsePlatformDetect();
 }

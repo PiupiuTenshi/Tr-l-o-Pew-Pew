@@ -10,5 +10,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../PewPew.Contracts/PewPew.Contracts.csproj" />
+    <ProjectReference Include="../PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
   </ItemGroup>
 </Project>
