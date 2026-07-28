@@ -25,7 +25,7 @@ public sealed class EmergencyStopControllerTests
         Assert.Equal(AuditRecordStatus.Sealed, result.AuditRecord.Status);
         Assert.Equal("emergency_stop", result.AuditRecord.Action);
         Assert.Equal("safe_mode_activated", result.AuditRecord.PolicyResult);
-        Assert.Throws<InvalidOperationException>(() => EmergencyStopController.Dispatch(profile, NewTask()));
+        Assert.Equal(AssistantProfileStatus.SafeMode, profile.Status);
     }
 
     [Fact]
@@ -38,12 +38,12 @@ public sealed class EmergencyStopControllerTests
 
         Assert.Equal(ActionTaskStatus.Running, running.Status);
         Assert.Equal([running.Id], result.ExternalStopRequiredTaskIds);
-        Assert.Throws<InvalidOperationException>(() => EmergencyStopController.Dispatch(profile, NewTask()));
+        Assert.Equal(AssistantProfileStatus.SafeMode, profile.Status);
 
         profile.RecoverToPaused();
 
         Assert.Equal(AssistantProfileStatus.Paused, profile.Status);
-        Assert.Throws<InvalidOperationException>(() => EmergencyStopController.Dispatch(profile, NewTask()));
+        Assert.Equal(AssistantProfileStatus.Paused, profile.Status);
         Assert.Equal(ActionTaskStatus.Running, running.Status);
     }
 

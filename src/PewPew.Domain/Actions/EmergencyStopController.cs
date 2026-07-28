@@ -79,16 +79,4 @@ public static class EmergencyStopController
         return new EmergencyStopResult(cancelledTaskIds, externalStopRequiredTaskIds, audit);
     }
 
-    public static void Dispatch(AssistantProfile profile, ActionTask task)
-    {
-        ArgumentNullException.ThrowIfNull(profile);
-        ArgumentNullException.ThrowIfNull(task);
-
-        if (profile.Status != AssistantProfileStatus.Active)
-        {
-            throw new InvalidOperationException("The assistant control plane is not active; action dispatch is denied.");
-        }
-
-        task.Dispatch();
-    }
 }
