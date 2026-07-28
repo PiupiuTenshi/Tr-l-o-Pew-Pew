@@ -1,0 +1,2 @@
+# Keep C# sources on LF in every checkout so the formatter behaves consistently.
+*.cs text eol=lf

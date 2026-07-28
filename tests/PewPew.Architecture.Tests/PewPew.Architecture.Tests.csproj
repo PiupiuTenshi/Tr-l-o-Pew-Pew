@@ -6,7 +6,9 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
@@ -14,6 +16,8 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/PewPew.Application/PewPew.Application.csproj" />
+    <ProjectReference Include="../../src/PewPew.Domain/PewPew.Domain.csproj" />
     <ProjectReference Include="../../src/PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
   </ItemGroup>
   <ItemGroup>
