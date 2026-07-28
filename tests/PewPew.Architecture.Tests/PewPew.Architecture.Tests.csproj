@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <RootNamespace>PewPew.Architecture.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -19,6 +19,7 @@
     <ProjectReference Include="../../src/PewPew.Application/PewPew.Application.csproj" />
     <ProjectReference Include="../../src/PewPew.Domain/PewPew.Domain.csproj" />
     <ProjectReference Include="../../src/PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
+    <ProjectReference Include="../../src/PewPew.Desktop/PewPew.Desktop.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures\**\*">
