@@ -20,5 +20,5 @@ public sealed class PersistenceMigrationTests
         Assert.Equal(1, process.ExecuteNonQuery());
         Assert.Equal(0, process.ExecuteNonQuery());
     }
-    private static string FindRoot() { var d=new DirectoryInfo(AppContext.BaseDirectory); while(d is not null && !File.Exists(Path.Combine(d.FullName,"PewPew.sln"))) { d=d.Parent; } return d!.FullName; }
+    private static string FindRoot() { var d = new DirectoryInfo(AppContext.BaseDirectory); while (d is not null && !File.Exists(Path.Combine(d.FullName, "PewPew.sln"))) { d = d.Parent; } return d!.FullName; }
 }
