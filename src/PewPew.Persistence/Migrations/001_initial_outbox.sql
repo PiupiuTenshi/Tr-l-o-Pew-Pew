@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS OutboxMessages (
+    Id TEXT NOT NULL PRIMARY KEY,
+    Type TEXT NOT NULL,
+    Payload TEXT NOT NULL,
+    OccurredAtUtc TEXT NOT NULL,
+    ProcessedAtUtc TEXT NULL,
+    Version INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS SchemaMigrations (
+    Id TEXT NOT NULL PRIMARY KEY,
+    AppliedAtUtc TEXT NOT NULL
+);
