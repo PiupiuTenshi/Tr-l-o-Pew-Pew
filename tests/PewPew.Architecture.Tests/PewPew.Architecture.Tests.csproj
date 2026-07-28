@@ -14,6 +14,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/PewPew.Domain/PewPew.Domain.csproj" />
     <ProjectReference Include="../../src/PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
   </ItemGroup>
   <ItemGroup>
