@@ -26,6 +26,14 @@ foreach ($fragment in $requiredFragments) {
     }
 }
 
+$invokeCiPath = Join-Path $PSScriptRoot 'Invoke-Ci.ps1'
+$invokeCi = Get-Content -Raw -LiteralPath $invokeCiPath
+foreach ($fragment in @('Test-ArchitectureRules.ps1', 'Test-SecretHygiene.ps1')) {
+    if ($invokeCi.IndexOf($fragment, [StringComparison]::Ordinal) -lt 0) {
+        throw "Invoke-Ci.ps1 is missing required gate: $fragment"
+    }
+}
+
 if ($workflow -match '(?im)^\s*(environment|deploy|deployment)\s*:' -or $workflow -match '\$\{\{\s*secrets\.') {
     throw 'P00-T03 CI must not include deployment or secret usage.'
 }

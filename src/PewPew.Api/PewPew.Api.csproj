@@ -8,5 +8,6 @@
     <ProjectReference Include="../PewPew.Contracts/PewPew.Contracts.csproj" />
     <ProjectReference Include="../PewPew.Infrastructure/PewPew.Infrastructure.csproj" />
     <ProjectReference Include="../PewPew.Persistence/PewPew.Persistence.csproj" />
+    <ProjectReference Include="../PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
   </ItemGroup>
 </Project>

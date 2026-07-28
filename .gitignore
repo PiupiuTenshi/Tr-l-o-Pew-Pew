@@ -43,3 +43,7 @@ secrets.json
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Local-only documentation. Keep only the root repository overview public.
+*.md
+!/README.md
