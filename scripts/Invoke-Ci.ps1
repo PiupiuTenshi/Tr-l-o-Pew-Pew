@@ -24,4 +24,14 @@ if ($SimulateFailure) {
 
 Invoke-DotnetCommand -Arguments @('restore', 'PewPew.sln')
 Invoke-DotnetCommand -Arguments @('build', 'PewPew.sln', '--configuration', 'Release', '--no-restore')
+& "$PSScriptRoot/Test-ArchitectureRules.ps1" -NoBuild
+if ($LASTEXITCODE -ne 0) {
+    throw "Architecture rule gate failed with exit code $LASTEXITCODE."
+}
+
+& "$PSScriptRoot/Test-SecretHygiene.ps1"
+if ($LASTEXITCODE -ne 0) {
+    throw "Secret hygiene gate failed with exit code $LASTEXITCODE."
+}
+
 Invoke-DotnetCommand -Arguments @('test', 'PewPew.sln', '--configuration', 'Release', '--no-build', '--nologo')

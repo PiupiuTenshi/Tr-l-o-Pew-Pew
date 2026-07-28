@@ -25,7 +25,8 @@ function Assert-NoSecretAssignment {
 }
 
 if ($SimulateFailure) {
-    Assert-NoSecretAssignment -Content 'client_secret = "simulated-secret-value"' -Source 'simulation'
+    $simulatedValue = 'simulated-' + 'secret-value'
+    Assert-NoSecretAssignment -Content "client_secret = `"$simulatedValue`"" -Source 'simulation'
 }
 
 $trackedFiles = @(git ls-files)
