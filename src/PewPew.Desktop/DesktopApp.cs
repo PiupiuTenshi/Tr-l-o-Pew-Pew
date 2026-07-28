@@ -37,6 +37,7 @@ public sealed class DesktopApp : Application
 
     private Window CreateMainWindow(DesktopShellState shell)
     {
+        var audioSession = new AudioSessionState();
         var statusText = new TextBlock
         {
             Text = shell.StatusLabel,
@@ -78,6 +79,66 @@ public sealed class DesktopApp : Application
             }
         };
 
+        var audioStatus = new TextBlock
+        {
+            Text = audioSession.ConsentLabel,
+            TextWrapping = TextWrapping.Wrap
+        };
+        AutomationProperties.SetName(audioStatus, "Microphone consent and listening status");
+        var pushToTalk = new Button
+        {
+            Content = "Hold to talk",
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        AutomationProperties.SetName(pushToTalk, "Hold to start an explicit push-to-talk session");
+        var cancelListening = new Button
+        {
+            Content = "Cancel listening",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsEnabled = false
+        };
+        AutomationProperties.SetName(cancelListening, "Cancel the active push-to-talk session");
+        void UpdateAudioControls()
+        {
+            audioStatus.Text = audioSession.ConsentLabel;
+            cancelListening.IsEnabled = audioSession.IsListening;
+        }
+
+        pushToTalk.PointerPressed += (_, eventArgs) =>
+        {
+            if (!audioSession.IsListening)
+            {
+                audioSession.Start();
+                eventArgs.Pointer.Capture(pushToTalk);
+                UpdateAudioControls();
+            }
+        };
+        pushToTalk.PointerReleased += (_, eventArgs) =>
+        {
+            if (audioSession.IsListening)
+            {
+                audioSession.Stop();
+                eventArgs.Pointer.Capture(null);
+                UpdateAudioControls();
+            }
+        };
+        pushToTalk.PointerCaptureLost += (_, _) =>
+        {
+            if (audioSession.IsListening)
+            {
+                audioSession.Cancel();
+                UpdateAudioControls();
+            }
+        };
+        cancelListening.Click += (_, _) =>
+        {
+            if (audioSession.IsListening)
+            {
+                audioSession.Cancel();
+                UpdateAudioControls();
+            }
+        };
+
         var content = new Border
         {
             Padding = new Thickness(24),
@@ -105,6 +166,15 @@ public sealed class DesktopApp : Application
                     },
                     new TextBlock { Text = "Status", FontWeight = FontWeight.SemiBold },
                     statusText,
+                    new TextBlock { Text = "Voice", FontWeight = FontWeight.SemiBold },
+                    new TextBlock
+                    {
+                        Text = "Push-to-talk is an explicit per-session consent control. No microphone provider is connected yet.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    audioStatus,
+                    pushToTalk,
+                    cancelListening,
                     new TextBlock { Text = "Text command", FontWeight = FontWeight.SemiBold },
                     input,
                     new TextBlock { Text = "Press Ctrl+Enter to submit from the keyboard." },
