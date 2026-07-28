@@ -45,11 +45,11 @@ public sealed class ActionTask
 
     public string? FailureReason { get; private set; }
 
-    public void RequireConfirmation() => Move(ActionTaskStatus.Queued, ActionTaskStatus.WaitingConfirmation);
+    internal void RequireConfirmation() => Move(ActionTaskStatus.Queued, ActionTaskStatus.WaitingConfirmation);
 
-    public void Dispatch() => Move(ActionTaskStatus.Queued, ActionTaskStatus.Running);
+    internal void Dispatch() => Move(ActionTaskStatus.Queued, ActionTaskStatus.Running);
 
-    public void ConsumeConfirmation() => Move(ActionTaskStatus.WaitingConfirmation, ActionTaskStatus.Running);
+    internal void ConsumeConfirmation() => Move(ActionTaskStatus.WaitingConfirmation, ActionTaskStatus.Running);
 
     public void Complete(string verificationEvidence)
     {
