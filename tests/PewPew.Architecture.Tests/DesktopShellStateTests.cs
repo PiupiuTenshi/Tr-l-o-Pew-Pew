@@ -30,6 +30,16 @@ public sealed class DesktopShellStateTests
     }
 
     [Fact]
+    public void VietnameseTextProducesAVietnameseResponse()
+    {
+        var state = new DesktopShellState(new StartupConfiguration(false, "C:\\PewPew"));
+
+        state.SubmitText("Xin chào Pew Pew");
+
+        Assert.Equal("Đã nhận văn bản. Chức năng thực thi cục bộ chưa được bật.", state.ResponseLabel);
+    }
+
+    [Fact]
     public void BlankTextDoesNotCreateAnAction()
     {
         var state = new DesktopShellState(new StartupConfiguration(true, "C:\\PewPew"));

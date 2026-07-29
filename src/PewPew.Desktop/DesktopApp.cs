@@ -75,6 +75,19 @@ public sealed class DesktopApp : Avalonia.Application
             TextWrapping = TextWrapping.Wrap
         };
         AutomationProperties.SetName(speechStatus, "Local speech output status");
+        var voicePicker = new ComboBox
+        {
+            ItemsSource = speech.AvailableVoices,
+            SelectedItem = speech.SelectedVoice,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        AutomationProperties.SetName(voicePicker, "Local speech voice selection");
+        var voiceStatus = new TextBlock
+        {
+            Text = speech.SelectedVoice?.DisplayName ?? "Windows default voice is unavailable.",
+            TextWrapping = TextWrapping.Wrap
+        };
+        AutomationProperties.SetName(voiceStatus, "Selected local speech voice");
         var speakResponse = new Button
         {
             Content = "Speak response",
@@ -92,6 +105,8 @@ public sealed class DesktopApp : Avalonia.Application
         {
             speechStatus.Text = speech.StatusLabel;
             stopSpeaking.IsEnabled = speech.IsSpeaking;
+            voicePicker.IsEnabled = !speech.IsSpeaking && speech.AvailableVoices.Count > 0;
+            voiceStatus.Text = speech.SelectedVoice?.DisplayName ?? speech.StatusLabel;
         }
 
         async Task SpeakResponseAsync()
@@ -125,6 +140,17 @@ public sealed class DesktopApp : Avalonia.Application
         stopSpeaking.Click += async (_, _) =>
         {
             await speech.CancelAsync();
+            UpdateSpeechControls();
+        };
+        voicePicker.SelectionChanged += (_, _) =>
+        {
+            if (voicePicker.SelectedItem is not LocalSpeechVoice voice || voice.Id == speech.SelectedVoiceId)
+            {
+                return;
+            }
+
+            _ = speech.SelectVoice(voice.Id);
+            voicePicker.SelectedItem = speech.SelectedVoice;
             UpdateSpeechControls();
         };
 
@@ -191,17 +217,19 @@ public sealed class DesktopApp : Avalonia.Application
         var content = new Border
         {
             Padding = new Thickness(24),
-            Child = new StackPanel
+            Child = new ScrollViewer
             {
-                Spacing = 16,
-                Children =
+                Content = new StackPanel
                 {
-                    new TextBlock
+                    Spacing = 16,
+                    Children =
                     {
-                        Text = "Pew Pew Assistant",
-                        FontSize = 28,
-                        FontWeight = FontWeight.Bold
-                    },
+                        new TextBlock
+                        {
+                            Text = "Pew Pew Assistant",
+                            FontSize = 28,
+                            FontWeight = FontWeight.Bold
+                        },
                     new Border
                     {
                         Background = new SolidColorBrush(Color.Parse("#183A5A")),
@@ -220,6 +248,8 @@ public sealed class DesktopApp : Avalonia.Application
                     speakResponse,
                     stopSpeaking,
                     new TextBlock { Text = "Voice", FontWeight = FontWeight.SemiBold },
+                    voicePicker,
+                    voiceStatus,
                     new TextBlock
                     {
                         Text = "Push-to-talk is an explicit per-session consent control. No microphone provider is connected yet.",
@@ -234,7 +264,8 @@ public sealed class DesktopApp : Avalonia.Application
                     submit,
                     new Separator(),
                     new TextBlock { Text = "Response", FontWeight = FontWeight.SemiBold },
-                    responseText
+                        responseText
+                    }
                 }
             }
         };
@@ -303,6 +334,13 @@ public sealed class DesktopApp : Avalonia.Application
 
     private sealed class UnavailableSpeechOutput : ILocalSpeechOutput
     {
+        public IReadOnlyList<LocalSpeechVoice> AvailableVoices => Array.Empty<LocalSpeechVoice>();
+
+        public string SelectedVoiceId => string.Empty;
+
+        public SpeechOutputResult SelectVoice(string voiceId) =>
+            new(SpeechOutputStatus.Unavailable, "Windows speech is unavailable.");
+
         public Task<SpeechOutputResult> SpeakAsync(string text, CancellationToken cancellationToken) =>
             Task.FromResult(new SpeechOutputResult(SpeechOutputStatus.Unavailable));
 
