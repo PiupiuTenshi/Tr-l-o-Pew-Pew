@@ -78,6 +78,37 @@ public sealed class LocalSpeechInputController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the current explicit capture and returns its in-memory WAV stream
+    /// once. The caller must dispose it; no audio is retained by the session.
+    /// </summary>
+    public async Task<MemoryStream?> StopCaptureAsync(CancellationToken cancellationToken)
+    {
+        if (!IsListening)
+        {
+            return null;
+        }
+
+        try
+        {
+            var audio = await _microphone.StopAsync(cancellationToken).ConfigureAwait(false);
+            _audioSession.Stop();
+            StatusLabel = "Audio captured locally. Processing remains local.";
+            return audio;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await CancelAsync().ConfigureAwait(false);
+            return null;
+        }
+        catch
+        {
+            await CancelAsync().ConfigureAwait(false);
+            StatusLabel = "Local audio capture failed. Text input remains available.";
+            return null;
+        }
+    }
+
     public async Task CancelAsync()
     {
         if (_microphone.IsRecording)

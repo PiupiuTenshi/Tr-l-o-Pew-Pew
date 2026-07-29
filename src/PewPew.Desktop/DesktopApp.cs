@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Themes.Fluent;
 using PewPew.Application.Speech;
+using PewPew.Application.Voice;
 using PewPew.SharedKernel.Configuration;
 
 namespace PewPew.Desktop;
@@ -57,6 +58,10 @@ public sealed class DesktopApp : Avalonia.Application
             audioSession,
             new WindowsMicrophoneCapture(),
             new LocalSpeechInteractionService(_speechTranscriber));
+        var wakePhraseActivation = new WakePhraseActivationService(
+            new PcmWaveVoiceActivityGate(),
+            new WhisperWakePhraseDetector(_speechTranscriber),
+            new LocalSpeechInputListeningActivator(speechInput));
         var speech = new SpeechOutputController(_speechOutput);
         var statusText = new TextBlock
         {
@@ -192,12 +197,20 @@ public sealed class DesktopApp : Avalonia.Application
             IsEnabled = false
         };
         AutomationProperties.SetName(cancelListening, "Cancel the active push-to-talk session");
+        var checkWakePhrase = new Button
+        {
+            Content = "Check wake phrase",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsEnabled = false
+        };
+        AutomationProperties.SetName(checkWakePhrase, "Check captured local audio for the wake phrase");
         void UpdateAudioControls()
         {
             audioStatus.Text = speechInput.StatusLabel;
             cancelListening.IsEnabled = speechInput.IsListening;
             startListening.IsEnabled = !speechInput.IsListening;
             stopAndTranscribe.IsEnabled = speechInput.IsListening;
+            checkWakePhrase.IsEnabled = speechInput.IsListening;
         }
 
         async Task StartListeningAsync()
@@ -231,8 +244,31 @@ public sealed class DesktopApp : Avalonia.Application
             UpdateAudioControls();
         }
 
+        async Task CheckWakePhraseAsync()
+        {
+            await using var audio = await speechInput.StopCaptureAsync(CancellationToken.None);
+            if (audio is null)
+            {
+                UpdateAudioControls();
+                return;
+            }
+
+            var result = await wakePhraseActivation.TryActivateAsync(audio, CancellationToken.None);
+            audioStatus.Text = result.Status switch
+            {
+                WakePhraseActivationStatus.ListeningStarted => "Wake phrase detected locally. Listening for your request.",
+                WakePhraseActivationStatus.Cancelled => "Wake phrase check was cancelled. Text input remains available.",
+                _ => "Wake phrase was not detected. Audio was discarded; text input remains available."
+            };
+            cancelListening.IsEnabled = speechInput.IsListening;
+            startListening.IsEnabled = !speechInput.IsListening;
+            stopAndTranscribe.IsEnabled = speechInput.IsListening;
+            checkWakePhrase.IsEnabled = speechInput.IsListening;
+        }
+
         startListening.Click += async (_, _) => await StartListeningAsync();
         stopAndTranscribe.Click += async (_, _) => await StopAndTranscribeAsync();
+        checkWakePhrase.Click += async (_, _) => await CheckWakePhraseAsync();
         cancelListening.Click += async (_, _) =>
         {
             if (speechInput.IsListening)
@@ -288,7 +324,7 @@ public sealed class DesktopApp : Avalonia.Application
                     {
                         Orientation = Orientation.Horizontal,
                         Spacing = 8,
-                        Children = { startListening, stopAndTranscribe, cancelListening }
+                        Children = { startListening, checkWakePhrase, stopAndTranscribe, cancelListening }
                     },
                     new TextBlock { Text = "Text command", FontWeight = FontWeight.SemiBold },
                     input,

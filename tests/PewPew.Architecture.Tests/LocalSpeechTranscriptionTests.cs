@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using PewPew.Application.Speech;
+using PewPew.Application.Voice;
 using PewPew.Desktop;
 using PewPew.Domain.Interactions;
 using PewPew.SharedKernel.Configuration;
@@ -125,6 +126,31 @@ public sealed class LocalSpeechTranscriptionTests
     }
 
     [Fact]
+    public async Task WakePhraseActivationStartsANewListeningSessionWithoutDispatchingAnAction()
+    {
+        var audioSession = new AudioSessionState();
+        var microphone = new FakeMicrophoneCapture();
+        var controller = new LocalSpeechInputController(
+            audioSession,
+            microphone,
+            new LocalSpeechInteractionService(new FakeTranscriber(new LocalSpeechTranscriptionResult(
+                LocalSpeechTranscriptionStatus.Transcribed,
+                "ignored",
+                1f))));
+        var activation = new WakePhraseActivationService(
+            new FakeVoiceActivityGate(),
+            new FakeWakeDetector(),
+            new LocalSpeechInputListeningActivator(controller));
+
+        var result = await activation.TryActivateAsync(new MemoryStream(CreateSilentWave()), TestContext.Current.CancellationToken);
+
+        Assert.Equal(WakePhraseActivationStatus.ListeningStarted, result.Status);
+        Assert.True(controller.IsListening);
+        Assert.True(microphone.IsRecording);
+        Assert.Equal(1, microphone.StartCount);
+    }
+
+    [Fact]
     public async Task ModelHashMismatchFailsClosedBeforeNativeModelLoad()
     {
         var modelPath = Path.GetTempFileName();
@@ -178,6 +204,8 @@ public sealed class LocalSpeechTranscriptionTests
     {
         public bool IsRecording { get; private set; }
 
+        public int StartCount { get; private set; }
+
         public bool WasCancelled { get; private set; }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -188,6 +216,7 @@ public sealed class LocalSpeechTranscriptionTests
             }
 
             IsRecording = true;
+            StartCount++;
             return Task.CompletedTask;
         }
 
@@ -207,6 +236,17 @@ public sealed class LocalSpeechTranscriptionTests
         public void Dispose()
         {
         }
+    }
+
+    private sealed class FakeVoiceActivityGate : ILocalVoiceActivityGate
+    {
+        public Task<bool> HasSpeechAsync(Stream waveAudio, CancellationToken cancellationToken) => Task.FromResult(true);
+    }
+
+    private sealed class FakeWakeDetector : ILocalWakePhraseDetector
+    {
+        public Task<WakePhraseDetectionResult> DetectAsync(Stream speechSegment, CancellationToken cancellationToken) =>
+            Task.FromResult(new WakePhraseDetectionResult(WakePhraseDetectionStatus.Detected));
     }
 
     private static byte[] CreateSilentWave()
