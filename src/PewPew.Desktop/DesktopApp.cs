@@ -6,14 +6,21 @@ using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using PewPew.Application.Speech;
 using PewPew.SharedKernel.Configuration;
 
 namespace PewPew.Desktop;
 
-public sealed class DesktopApp : Application
+public sealed class DesktopApp : Avalonia.Application
 {
+    private static ILocalSpeechOutput _speechOutput = new UnavailableSpeechOutput();
     private TrayIcon? _trayIcon;
     private bool _isExiting;
+
+    public static void ConfigureSpeechOutput(ILocalSpeechOutput speechOutput)
+    {
+        _speechOutput = speechOutput ?? throw new ArgumentNullException(nameof(speechOutput));
+    }
 
     public override void Initialize()
     {
@@ -38,6 +45,7 @@ public sealed class DesktopApp : Application
     private Window CreateMainWindow(DesktopShellState shell)
     {
         var audioSession = new AudioSessionState();
+        var speech = new SpeechOutputController(_speechOutput);
         var statusText = new TextBlock
         {
             Text = shell.StatusLabel,
@@ -61,22 +69,63 @@ public sealed class DesktopApp : Application
             HorizontalAlignment = HorizontalAlignment.Right
         };
         AutomationProperties.SetName(submit, "Submit assistant text");
-        void SubmitText()
+        var speechStatus = new TextBlock
+        {
+            Text = speech.StatusLabel,
+            TextWrapping = TextWrapping.Wrap
+        };
+        AutomationProperties.SetName(speechStatus, "Local speech output status");
+        var speakResponse = new Button
+        {
+            Content = "Speak response",
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        AutomationProperties.SetName(speakResponse, "Speak the current response locally");
+        var stopSpeaking = new Button
+        {
+            Content = "Stop speaking",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsEnabled = false
+        };
+        AutomationProperties.SetName(stopSpeaking, "Stop local speech output");
+        void UpdateSpeechControls()
+        {
+            speechStatus.Text = speech.StatusLabel;
+            stopSpeaking.IsEnabled = speech.IsSpeaking;
+        }
+
+        async Task SpeakResponseAsync()
+        {
+            var speaking = speech.SpeakAsync(shell.ResponseLabel);
+            UpdateSpeechControls();
+            await speaking;
+            UpdateSpeechControls();
+        }
+
+        async Task SubmitTextAsync()
         {
             shell.SubmitText(input.Text);
             statusText.Text = shell.StatusLabel;
             responseText.Text = shell.ResponseLabel;
             _trayIcon?.ToolTipText = $"Pew Pew — {shell.ModeLabel}: {shell.StatusLabel}";
+            await SpeakResponseAsync();
         }
 
-        submit.Click += (_, _) => SubmitText();
-        input.KeyDown += (_, eventArgs) =>
+        submit.Click += async (_, _) => await SubmitTextAsync();
+        input.KeyDown += async (_, eventArgs) =>
         {
             if (eventArgs.Key == Key.Enter && eventArgs.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                SubmitText();
+                await SubmitTextAsync();
                 eventArgs.Handled = true;
             }
+        };
+
+        speakResponse.Click += async (_, _) => await SpeakResponseAsync();
+        stopSpeaking.Click += async (_, _) =>
+        {
+            await speech.CancelAsync();
+            UpdateSpeechControls();
         };
 
         var audioStatus = new TextBlock
@@ -166,6 +215,10 @@ public sealed class DesktopApp : Application
                     },
                     new TextBlock { Text = "Status", FontWeight = FontWeight.SemiBold },
                     statusText,
+                    new TextBlock { Text = "Speech", FontWeight = FontWeight.SemiBold },
+                    speechStatus,
+                    speakResponse,
+                    stopSpeaking,
                     new TextBlock { Text = "Voice", FontWeight = FontWeight.SemiBold },
                     new TextBlock
                     {
@@ -246,5 +299,13 @@ public sealed class DesktopApp : Application
         }
 
         window.Activate();
+    }
+
+    private sealed class UnavailableSpeechOutput : ILocalSpeechOutput
+    {
+        public Task<SpeechOutputResult> SpeakAsync(string text, CancellationToken cancellationToken) =>
+            Task.FromResult(new SpeechOutputResult(SpeechOutputStatus.Unavailable));
+
+        public Task CancelAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
