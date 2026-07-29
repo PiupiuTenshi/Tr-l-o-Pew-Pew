@@ -1,4 +1,6 @@
 using PewPew.Application.Voice;
+using PewPew.Application.Speech;
+using PewPew.Desktop;
 using Xunit;
 
 namespace PewPew.Architecture.Tests;
@@ -57,6 +59,16 @@ public sealed class WakePhraseActivationServiceTests
         Assert.False(activator.WasCalled);
     }
 
+    [Fact]
+    public async Task WhisperDetectorRecognizesVietnameseWakePhraseWithoutPersistingTranscript()
+    {
+        var detector = new WhisperWakePhraseDetector(new TranscriptOnlyTranscriber("Chào Pew Pew"));
+
+        var result = await detector.DetectAsync(new MemoryStream([1]), TestContext.Current.CancellationToken);
+
+        Assert.Equal(WakePhraseDetectionStatus.Detected, result.Status);
+    }
+
     private sealed class FakeVad(bool hasSpeech) : ILocalVoiceActivityGate
     {
         public Task<bool> HasSpeechAsync(Stream waveAudio, CancellationToken cancellationToken)
@@ -88,5 +100,11 @@ public sealed class WakePhraseActivationServiceTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(started);
         }
+    }
+
+    private sealed class TranscriptOnlyTranscriber(string transcript) : ILocalSpeechTranscriber
+    {
+        public Task<LocalSpeechTranscriptionResult> TranscribeAsync(Stream waveAudio, CancellationToken cancellationToken) =>
+            Task.FromResult(new LocalSpeechTranscriptionResult(LocalSpeechTranscriptionStatus.Transcribed, transcript, 1f));
     }
 }
