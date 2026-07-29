@@ -15,6 +15,7 @@ public static class DesktopHost
     public static void Start(string[] args)
     {
         _ = StartupConfiguration.LoadFromEnvironment();
+        DesktopApp.ConfigureSpeechOutput(new WindowsSpeechOutput());
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
