@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Themes.Fluent;
 using PewPew.Application.Speech;
 using PewPew.SharedKernel.Configuration;
 
@@ -14,6 +15,7 @@ namespace PewPew.Desktop;
 public sealed class DesktopApp : Avalonia.Application
 {
     private static ILocalSpeechOutput _speechOutput = new UnavailableSpeechOutput();
+    private static ILocalSpeechTranscriber _speechTranscriber = new UnavailableSpeechTranscriber();
     private TrayIcon? _trayIcon;
     private bool _isExiting;
 
@@ -22,8 +24,14 @@ public sealed class DesktopApp : Avalonia.Application
         _speechOutput = speechOutput ?? throw new ArgumentNullException(nameof(speechOutput));
     }
 
+    public static void ConfigureSpeechTranscriber(ILocalSpeechTranscriber speechTranscriber)
+    {
+        _speechTranscriber = speechTranscriber ?? throw new ArgumentNullException(nameof(speechTranscriber));
+    }
+
     public override void Initialize()
     {
+        Styles.Add(new FluentTheme());
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -45,6 +53,10 @@ public sealed class DesktopApp : Avalonia.Application
     private Window CreateMainWindow(DesktopShellState shell)
     {
         var audioSession = new AudioSessionState();
+        var speechInput = new LocalSpeechInputController(
+            audioSession,
+            new WindowsMicrophoneCapture(),
+            new LocalSpeechInteractionService(_speechTranscriber));
         var speech = new SpeechOutputController(_speechOutput);
         var statusText = new TextBlock
         {
@@ -160,12 +172,19 @@ public sealed class DesktopApp : Avalonia.Application
             TextWrapping = TextWrapping.Wrap
         };
         AutomationProperties.SetName(audioStatus, "Microphone consent and listening status");
-        var pushToTalk = new Button
+        var startListening = new Button
         {
-            Content = "Hold to talk",
+            Content = "Start listening",
             HorizontalAlignment = HorizontalAlignment.Left
         };
-        AutomationProperties.SetName(pushToTalk, "Hold to start an explicit push-to-talk session");
+        AutomationProperties.SetName(startListening, "Start an explicit local microphone session");
+        var stopAndTranscribe = new Button
+        {
+            Content = "Stop and transcribe",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            IsEnabled = false
+        };
+        AutomationProperties.SetName(stopAndTranscribe, "Stop listening and transcribe locally");
         var cancelListening = new Button
         {
             Content = "Cancel listening",
@@ -175,41 +194,50 @@ public sealed class DesktopApp : Avalonia.Application
         AutomationProperties.SetName(cancelListening, "Cancel the active push-to-talk session");
         void UpdateAudioControls()
         {
-            audioStatus.Text = audioSession.ConsentLabel;
-            cancelListening.IsEnabled = audioSession.IsListening;
+            audioStatus.Text = speechInput.StatusLabel;
+            cancelListening.IsEnabled = speechInput.IsListening;
+            startListening.IsEnabled = !speechInput.IsListening;
+            stopAndTranscribe.IsEnabled = speechInput.IsListening;
         }
 
-        pushToTalk.PointerPressed += (_, eventArgs) =>
+        async Task StartListeningAsync()
         {
-            if (!audioSession.IsListening)
+            if (!speechInput.IsListening)
             {
-                audioSession.Start();
-                eventArgs.Pointer.Capture(pushToTalk);
+                await speechInput.StartAsync(CancellationToken.None);
                 UpdateAudioControls();
             }
-        };
-        pushToTalk.PointerReleased += (_, eventArgs) =>
+        }
+
+        async Task StopAndTranscribeAsync()
         {
-            if (audioSession.IsListening)
+            var result = await speechInput.StopAndTranscribeAsync(CancellationToken.None);
+            if (result is not null)
             {
-                audioSession.Stop();
-                eventArgs.Pointer.Capture(null);
-                UpdateAudioControls();
+                if (result.Transcription.Status == LocalSpeechTranscriptionStatus.Transcribed)
+                {
+                    shell.SubmitText(result.Transcription.Transcript);
+                    statusText.Text = shell.StatusLabel;
+                    responseText.Text = shell.ResponseLabel;
+                    await SpeakResponseAsync();
+                }
+                else
+                {
+                    responseText.Text = result.Transcription.ClarificationPrompt ?? result.Transcription.Reason ?? shell.ResponseLabel;
+                }
             }
-        };
-        pushToTalk.PointerCaptureLost += (_, _) =>
+
+            _trayIcon?.ToolTipText = $"Pew Pew — {shell.ModeLabel}: {speechInput.StatusLabel}";
+            UpdateAudioControls();
+        }
+
+        startListening.Click += async (_, _) => await StartListeningAsync();
+        stopAndTranscribe.Click += async (_, _) => await StopAndTranscribeAsync();
+        cancelListening.Click += async (_, _) =>
         {
-            if (audioSession.IsListening)
+            if (speechInput.IsListening)
             {
-                audioSession.Cancel();
-                UpdateAudioControls();
-            }
-        };
-        cancelListening.Click += (_, _) =>
-        {
-            if (audioSession.IsListening)
-            {
-                audioSession.Cancel();
+                await speechInput.CancelAsync();
                 UpdateAudioControls();
             }
         };
@@ -252,12 +280,16 @@ public sealed class DesktopApp : Avalonia.Application
                     voiceStatus,
                     new TextBlock
                     {
-                        Text = "Push-to-talk is an explicit per-session consent control. No microphone provider is connected yet.",
+                        Text = "Start listening grants microphone consent only for this session. Stop and transcribe processes audio locally, then discards it.",
                         TextWrapping = TextWrapping.Wrap
                     },
                     audioStatus,
-                    pushToTalk,
-                    cancelListening,
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 8,
+                        Children = { startListening, stopAndTranscribe, cancelListening }
+                    },
                     new TextBlock { Text = "Text command", FontWeight = FontWeight.SemiBold },
                     input,
                     new TextBlock { Text = "Press Ctrl+Enter to submit from the keyboard." },
@@ -279,7 +311,16 @@ public sealed class DesktopApp : Avalonia.Application
             MinHeight = 420,
             Content = content
         };
-        window.Closing += OnWindowClosing;
+        window.Closing += (_, eventArgs) =>
+        {
+            if (!_isExiting)
+            {
+                OnWindowClosing(window, eventArgs);
+                return;
+            }
+
+            speechInput.Dispose();
+        };
         return window;
     }
 
@@ -345,5 +386,13 @@ public sealed class DesktopApp : Avalonia.Application
             Task.FromResult(new SpeechOutputResult(SpeechOutputStatus.Unavailable));
 
         public Task CancelAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class UnavailableSpeechTranscriber : ILocalSpeechTranscriber
+    {
+        public Task<LocalSpeechTranscriptionResult> TranscribeAsync(Stream waveAudio, CancellationToken cancellationToken) =>
+            Task.FromResult(new LocalSpeechTranscriptionResult(
+                LocalSpeechTranscriptionStatus.Unavailable,
+                Reason: "Local STT is unavailable. Text input remains available."));
     }
 }
