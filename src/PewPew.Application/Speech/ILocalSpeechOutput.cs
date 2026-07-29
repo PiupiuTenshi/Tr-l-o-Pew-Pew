@@ -15,6 +15,8 @@ public sealed record SpeechOutputResult(SpeechOutputStatus Status, string? Reaso
 /// </summary>
 public sealed record LocalSpeechVoice(string Id, string DisplayName, string CultureName)
 {
+    public const string AutomaticId = "automatic";
+
     public override string ToString() => DisplayName;
 }
 

@@ -94,7 +94,7 @@ public sealed class SpeechOutputControllerTests
     }
 
     [Fact]
-    public void InstalledMicrosoftAnIsExposedAndPreferredByTheWindowsAdapter()
+    public void InstalledMicrosoftAnIsExposedAlongsideAutomaticLanguageSelection()
     {
         using var speech = new WindowsSpeechOutput();
         var microsoftAn = speech.AvailableVoices.FirstOrDefault(voice =>
@@ -105,8 +105,22 @@ public sealed class SpeechOutputControllerTests
             return;
         }
 
-        Assert.Equal(microsoftAn.Id, speech.SelectedVoiceId);
+        Assert.Equal(LocalSpeechVoice.AutomaticId, speech.SelectedVoiceId);
         Assert.Equal(SpeechOutputStatus.Completed, speech.SelectVoice(microsoftAn.Id).Status);
+    }
+
+    [Fact]
+    public void AutomaticSelectionUsesVietnameseForVietnameseTextAndEnglishForEnglishText()
+    {
+        LocalSpeechVoice[] voices =
+        [
+            new(LocalSpeechVoice.AutomaticId, "Automatic", string.Empty),
+            new("voice:an", "Microsoft An - Vietnamese (Vietnam)", "vi-VN"),
+            new("voice:david", "Microsoft David - English (United States)", "en-US")
+        ];
+
+        Assert.Equal("voice:an", LocalSpeechVoiceSelector.ResolveVoiceId("Xin chào Pew Pew", voices));
+        Assert.Equal("voice:david", LocalSpeechVoiceSelector.ResolveVoiceId("Hello Pew Pew", voices));
     }
 
     private sealed class FakeSpeechOutput(SpeechOutputStatus result) : ILocalSpeechOutput

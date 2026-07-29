@@ -26,6 +26,16 @@ public sealed class DesktopShellStateTests
         Assert.Equal("Local Mode", state.ModeLabel);
         Assert.Equal(DesktopShellStatus.Understanding, state.Status);
         Assert.Equal("Understanding text input", state.StatusLabel);
+        Assert.Equal("Text received. Local action routing is not enabled yet.", state.ResponseLabel);
+    }
+
+    [Fact]
+    public void VietnameseTextProducesAVietnameseResponse()
+    {
+        var state = new DesktopShellState(new StartupConfiguration(false, "C:\\PewPew"));
+
+        state.SubmitText("Xin chào Pew Pew");
+
         Assert.Equal("Đã nhận văn bản. Chức năng thực thi cục bộ chưa được bật.", state.ResponseLabel);
     }
 

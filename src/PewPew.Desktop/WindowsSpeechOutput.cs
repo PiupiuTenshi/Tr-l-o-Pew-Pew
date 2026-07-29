@@ -28,18 +28,18 @@ public sealed class WindowsSpeechOutput : ILocalSpeechOutput, IDisposable
             _oneCoreVoices = Array.Empty<VoiceInformation>();
         }
 
-        AvailableVoices = _oneCoreVoices
+        var installedVoices = _oneCoreVoices
             .Select(voice => new LocalSpeechVoice($"onecore:{voice.Id}", voice.DisplayName, voice.Language))
             .ToArray();
 
-        if (AvailableVoices.Count > 0)
+        if (installedVoices.Length > 0)
         {
-            var preferred = AvailableVoices.FirstOrDefault(voice =>
-                voice.DisplayName.Contains("Microsoft An", StringComparison.OrdinalIgnoreCase)) ??
-                AvailableVoices.FirstOrDefault(voice =>
-                    string.Equals(voice.CultureName, "vi-VN", StringComparison.OrdinalIgnoreCase)) ??
-                AvailableVoices[0];
-            SelectedVoiceId = preferred.Id;
+            AvailableVoices =
+            [
+                new LocalSpeechVoice(LocalSpeechVoice.AutomaticId, "Automatic - match speech language", string.Empty),
+                .. installedVoices
+            ];
+            SelectedVoiceId = LocalSpeechVoice.AutomaticId;
             return;
         }
 
@@ -51,8 +51,12 @@ public sealed class WindowsSpeechOutput : ILocalSpeechOutput, IDisposable
                 $"legacy:{defaultVoice.Name}",
                 $"Windows default - {defaultVoice.Name}",
                 defaultVoice.Culture.Name);
-            AvailableVoices = [legacyVoice];
-            SelectedVoiceId = legacyVoice.Id;
+            AvailableVoices =
+            [
+                new LocalSpeechVoice(LocalSpeechVoice.AutomaticId, "Automatic - match speech language", string.Empty),
+                legacyVoice
+            ];
+            SelectedVoiceId = LocalSpeechVoice.AutomaticId;
         }
         catch
         {
@@ -93,8 +97,11 @@ public sealed class WindowsSpeechOutput : ILocalSpeechOutput, IDisposable
             return Task.FromResult(new SpeechOutputResult(SpeechOutputStatus.Unavailable));
         }
 
-        return SelectedVoiceId.StartsWith("onecore:", StringComparison.Ordinal)
-            ? SpeakOneCoreAsync(text, cancellationToken)
+        var voiceId = SelectedVoiceId == LocalSpeechVoice.AutomaticId
+            ? LocalSpeechVoiceSelector.ResolveVoiceId(text, AvailableVoices)
+            : SelectedVoiceId;
+        return voiceId.StartsWith("onecore:", StringComparison.Ordinal)
+            ? SpeakOneCoreAsync(text, voiceId, cancellationToken)
             : SpeakLegacyAsync(text, cancellationToken);
     }
 
@@ -130,9 +137,9 @@ public sealed class WindowsSpeechOutput : ILocalSpeechOutput, IDisposable
         _legacySynthesizer?.Dispose();
     }
 
-    private async Task<SpeechOutputResult> SpeakOneCoreAsync(string text, CancellationToken cancellationToken)
+    private async Task<SpeechOutputResult> SpeakOneCoreAsync(string text, string voiceId, CancellationToken cancellationToken)
     {
-        var selectedId = SelectedVoiceId["onecore:".Length..];
+        var selectedId = voiceId["onecore:".Length..];
         var selectedVoice = _oneCoreVoices.FirstOrDefault(voice => voice.Id == selectedId);
         if (selectedVoice is null)
         {
