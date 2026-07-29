@@ -217,17 +217,19 @@ public sealed class DesktopApp : Avalonia.Application
         var content = new Border
         {
             Padding = new Thickness(24),
-            Child = new StackPanel
+            Child = new ScrollViewer
             {
-                Spacing = 16,
-                Children =
+                Content = new StackPanel
                 {
-                    new TextBlock
+                    Spacing = 16,
+                    Children =
                     {
-                        Text = "Pew Pew Assistant",
-                        FontSize = 28,
-                        FontWeight = FontWeight.Bold
-                    },
+                        new TextBlock
+                        {
+                            Text = "Pew Pew Assistant",
+                            FontSize = 28,
+                            FontWeight = FontWeight.Bold
+                        },
                     new Border
                     {
                         Background = new SolidColorBrush(Color.Parse("#183A5A")),
@@ -262,7 +264,8 @@ public sealed class DesktopApp : Avalonia.Application
                     submit,
                     new Separator(),
                     new TextBlock { Text = "Response", FontWeight = FontWeight.SemiBold },
-                    responseText
+                        responseText
+                    }
                 }
             }
         };

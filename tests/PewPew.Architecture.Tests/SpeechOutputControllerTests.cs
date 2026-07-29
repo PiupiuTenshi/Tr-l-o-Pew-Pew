@@ -93,6 +93,22 @@ public sealed class SpeechOutputControllerTests
         Assert.Equal(SpeechOutputState.Failed, controller.State);
     }
 
+    [Fact]
+    public void InstalledMicrosoftAnIsExposedAndPreferredByTheWindowsAdapter()
+    {
+        using var speech = new WindowsSpeechOutput();
+        var microsoftAn = speech.AvailableVoices.FirstOrDefault(voice =>
+            voice.DisplayName.Contains("Microsoft An", StringComparison.OrdinalIgnoreCase));
+
+        if (microsoftAn is null)
+        {
+            return;
+        }
+
+        Assert.Equal(microsoftAn.Id, speech.SelectedVoiceId);
+        Assert.Equal(SpeechOutputStatus.Completed, speech.SelectVoice(microsoftAn.Id).Status);
+    }
+
     private sealed class FakeSpeechOutput(SpeechOutputStatus result) : ILocalSpeechOutput
     {
         private readonly IReadOnlyList<LocalSpeechVoice> _voices =
