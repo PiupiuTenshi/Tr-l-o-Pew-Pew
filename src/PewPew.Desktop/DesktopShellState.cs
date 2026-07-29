@@ -40,6 +40,6 @@ public sealed class DesktopShellState
 
         Status = DesktopShellStatus.Understanding;
         StatusLabel = "Understanding text input";
-        ResponseLabel = "Text received. Local action routing is not enabled yet.";
+        ResponseLabel = "Đã nhận văn bản. Chức năng thực thi cục bộ chưa được bật.";
     }
 }

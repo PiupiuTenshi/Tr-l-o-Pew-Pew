@@ -31,6 +31,12 @@ public sealed class SpeechOutputController
 
     public bool IsSpeaking => State == SpeechOutputState.Speaking;
 
+    public IReadOnlyList<LocalSpeechVoice> AvailableVoices => _speechOutput.AvailableVoices;
+
+    public string SelectedVoiceId => _speechOutput.SelectedVoiceId;
+
+    public LocalSpeechVoice? SelectedVoice => AvailableVoices.FirstOrDefault(voice => voice.Id == SelectedVoiceId);
+
     public string StatusLabel => State switch
     {
         SpeechOutputState.Speaking => "Speaking locally.",
@@ -85,6 +91,30 @@ public sealed class SpeechOutputController
     }
 
     public Task CancelAsync() => CancelActiveSpeechAsync();
+
+    public SpeechOutputResult SelectVoice(string? voiceId)
+    {
+        if (IsSpeaking)
+        {
+            return new SpeechOutputResult(SpeechOutputStatus.Failed, "Stop speech before changing the voice.");
+        }
+
+        if (string.IsNullOrWhiteSpace(voiceId))
+        {
+            return new SpeechOutputResult(SpeechOutputStatus.Failed, "A voice must be selected.");
+        }
+
+        var result = _speechOutput.SelectVoice(voiceId);
+        State = result.Status switch
+        {
+            SpeechOutputStatus.Completed => SpeechOutputState.Ready,
+            SpeechOutputStatus.Unavailable => SpeechOutputState.Unavailable,
+            SpeechOutputStatus.Cancelled => SpeechOutputState.Cancelled,
+            _ => SpeechOutputState.Failed
+        };
+
+        return result;
+    }
 
     private async Task CancelActiveSpeechAsync()
     {
