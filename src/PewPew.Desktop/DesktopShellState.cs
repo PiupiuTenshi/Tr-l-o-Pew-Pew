@@ -17,7 +17,7 @@ public sealed class DesktopShellState
         ModeLabel = configuration.PrivateMode ? "Private Mode" : "Local Mode";
         Status = DesktopShellStatus.Ready;
         StatusLabel = "Ready for text input";
-        ResponseLabel = "Text input is available. Voice and local actions are not enabled yet.";
+        ResponseLabel = "Text and local voice input are available. Local action routing is not enabled yet.";
     }
 
     public string ModeLabel { get; }
