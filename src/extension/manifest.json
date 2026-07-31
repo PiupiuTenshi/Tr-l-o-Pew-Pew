@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Pew Pew Assistant Bridge",
+  "version": "1.0.0",
+  "description": "Security-bound Chromium extension bridge for Pew Pew Assistant desktop application.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Pew Pew Assistant"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
