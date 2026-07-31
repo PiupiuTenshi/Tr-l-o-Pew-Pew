@@ -23,6 +23,7 @@ if ($SimulateFailure) {
 }
 
 Invoke-DotnetCommand -Arguments @('restore', 'PewPew.sln')
+Invoke-DotnetCommand -Arguments @('format', 'PewPew.sln', '--verify-no-changes', '--no-restore')
 Invoke-DotnetCommand -Arguments @('build', 'PewPew.sln', '--configuration', 'Release', '--no-restore')
 & "$PSScriptRoot/Test-ArchitectureRules.ps1" -NoBuild
 if ($LASTEXITCODE -ne 0) {
