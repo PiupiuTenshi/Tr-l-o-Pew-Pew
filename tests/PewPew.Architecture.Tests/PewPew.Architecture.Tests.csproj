@@ -19,8 +19,10 @@
     <ProjectReference Include="../../src/PewPew.Application/PewPew.Application.csproj" />
     <ProjectReference Include="../../src/PewPew.Domain/PewPew.Domain.csproj" />
     <ProjectReference Include="../../src/PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
+    <ProjectReference Include="../../src/PewPew.Infrastructure/PewPew.Infrastructure.csproj" />
     <ProjectReference Include="../../src/PewPew.Desktop/PewPew.Desktop.csproj" />
   </ItemGroup>
+
   <ItemGroup>
     <None Update="Fixtures\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
