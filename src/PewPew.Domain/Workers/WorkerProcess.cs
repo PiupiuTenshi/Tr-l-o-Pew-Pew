@@ -20,7 +20,12 @@ public enum WorkerProcessStatus
 /// </summary>
 public sealed class WorkerProcess
 {
-    public WorkerProcess(EntityId id, EntityId ownerTaskId, EntityId deviceId, DateTimeOffset timeoutAtUtc)
+    public WorkerProcess(
+        EntityId id,
+        EntityId ownerTaskId,
+        EntityId deviceId,
+        DateTimeOffset timeoutAtUtc,
+        WorkerResourceQuota? quota = null)
     {
         if (timeoutAtUtc <= DateTimeOffset.UtcNow)
         {
@@ -31,19 +36,23 @@ public sealed class WorkerProcess
         OwnerTaskId = ownerTaskId;
         DeviceId = deviceId;
         TimeoutAtUtc = timeoutAtUtc;
+        Quota = quota ?? WorkerResourceQuota.Default;
     }
 
     public EntityId Id { get; }
-
     public EntityId OwnerTaskId { get; }
-
     public EntityId DeviceId { get; }
-
     public DateTimeOffset TimeoutAtUtc { get; }
-
+    public WorkerResourceQuota Quota { get; }
     public int? RootProcessId { get; private set; }
-
     public WorkerProcessStatus Status { get; private set; } = WorkerProcessStatus.Created;
+    public string? FailureReason { get; private set; }
+    public int PeakRamMb { get; private set; }
+    public long OutputSizeBytes { get; private set; }
+
+    public bool IsTimedOut(DateTimeOffset now) => now >= TimeoutAtUtc;
+
+    public bool IsActive => Status is WorkerProcessStatus.Starting or WorkerProcessStatus.Running or WorkerProcessStatus.Stopping;
 
     public void Start() => Move(WorkerProcessStatus.Created, WorkerProcessStatus.Starting);
 
@@ -61,7 +70,7 @@ public sealed class WorkerProcess
 
     public void EmergencyKill()
     {
-        if (Status is not (WorkerProcessStatus.Starting or WorkerProcessStatus.Running or WorkerProcessStatus.Stopping))
+        if (!IsActive)
         {
             throw new InvalidOperationException("Only an active worker process can be emergency-killed.");
         }
@@ -69,14 +78,69 @@ public sealed class WorkerProcess
         Status = WorkerProcessStatus.Killed;
     }
 
-    public void MarkFailed()
+    public void MarkFailed(string? reason = null)
     {
-        if (Status is not (WorkerProcessStatus.Starting or WorkerProcessStatus.Running or WorkerProcessStatus.Stopping))
+        if (!IsActive)
         {
             throw new InvalidOperationException("Only an active worker process can fail.");
         }
 
         Status = WorkerProcessStatus.Failed;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            FailureReason = reason;
+        }
+    }
+
+    public void CheckTimeout(DateTimeOffset now)
+    {
+        if (IsTimedOut(now) && IsActive)
+        {
+            MarkTimedOut();
+        }
+    }
+
+    public void MarkTimedOut()
+    {
+        if (!IsActive)
+        {
+            return;
+        }
+
+        Status = WorkerProcessStatus.Failed;
+        FailureReason = "execution_timeout";
+    }
+
+    public void RecordResourceUsage(int currentRamMb, long outputSizeBytes)
+    {
+        if (currentRamMb > PeakRamMb)
+        {
+            PeakRamMb = currentRamMb;
+        }
+
+        OutputSizeBytes = outputSizeBytes;
+
+        if (currentRamMb > Quota.MaxRamMb)
+        {
+            MarkQuotaExceeded($"RAM quota exceeded: {currentRamMb} MB > {Quota.MaxRamMb} MB");
+            return;
+        }
+
+        if (outputSizeBytes > Quota.MaxOutputSizeBytes)
+        {
+            MarkQuotaExceeded($"Output size quota exceeded: {outputSizeBytes} bytes > {Quota.MaxOutputSizeBytes} bytes");
+        }
+    }
+
+    public void MarkQuotaExceeded(string reason)
+    {
+        if (!IsActive)
+        {
+            return;
+        }
+
+        Status = WorkerProcessStatus.Failed;
+        FailureReason = reason;
     }
 
     private void Move(WorkerProcessStatus expected, WorkerProcessStatus next)
