@@ -58,7 +58,7 @@ public sealed class ExtensionOriginPolicyValidator
             return false;
         }
 
-        if (manifest.HostPermissions.Any(p => p == "<all_urls>" || p == "*://*/*"))
+        if (manifest.HostPermissions.Any(p => p == "<all_urls>" || p == "*://*/*" || p.Contains('*')))
         {
             failureReason = "manifest_wildcard_host_permission_prohibited: Wildcard '<all_urls>' host permission is denied by security policy";
             return false;
@@ -107,12 +107,14 @@ public sealed class ExtensionOriginPolicyValidator
         // HTTPS scheme — if allowed origins list is populated, enforce match
         if (_allowedOrigins.Count == 0)
         {
-            return true; // Default HTTPS allowlist
+            return false;
         }
 
         var originString = $"{uri.Scheme}://{uri.Authority}".ToLowerInvariant();
         return _allowedOrigins.Contains(originString) || _allowedOrigins.Contains(uri.Host.ToLowerInvariant());
     }
+
+    public bool HasExplicitAllowedOrigins => _allowedOrigins.Count > 0;
 
     /// <summary>
     /// Allows registering an explicit HTTPS origin to the validator allowlist.
