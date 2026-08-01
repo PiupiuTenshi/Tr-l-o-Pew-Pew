@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text.Json;
 using PewPew.Application.BrowserExtension;
+using PewPew.Application.Automation;
 
 namespace PewPew.Desktop;
 
@@ -22,13 +23,22 @@ public sealed class NativeMessagingPipeServer : IAsyncDisposable
 {
     private readonly DesktopExtensionBridge _bridge;
     private readonly ExtensionOriginPolicyValidator _originPolicy;
+    private readonly NativeMessagingBrowserCommandBroker _commandBroker;
+    private readonly BrowserActiveTabContextStore _contexts;
     private readonly CancellationTokenSource _stopSource = new();
     private Task? _serveTask;
 
-    public NativeMessagingPipeServer(DesktopExtensionBridge bridge, ExtensionOriginPolicyValidator originPolicy, string? pipeName = null)
+    public NativeMessagingPipeServer(
+        DesktopExtensionBridge bridge,
+        ExtensionOriginPolicyValidator originPolicy,
+        string? pipeName = null,
+        NativeMessagingBrowserCommandBroker? commandBroker = null,
+        BrowserActiveTabContextStore? contexts = null)
     {
         _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
         _originPolicy = originPolicy ?? throw new ArgumentNullException(nameof(originPolicy));
+        _commandBroker = commandBroker ?? new NativeMessagingBrowserCommandBroker();
+        _contexts = contexts ?? new BrowserActiveTabContextStore();
         PipeName = pipeName ?? NativeMessagingPipeName.ForCurrentUser();
     }
 
@@ -66,6 +76,17 @@ public sealed class NativeMessagingPipeServer : IAsyncDisposable
         if (!bridgeResponse.IsSuccess)
         {
             return NativeMessagingTransportResponse.Rejected(bridgeResponse.ReasonCode);
+        }
+
+        if (request.Kind == "command_poll")
+        {
+            _contexts.RecordAuthenticatedPoll(request, nowUtc);
+            return _commandBroker.Poll(request);
+        }
+
+        if (request.Kind == "action_readback")
+        {
+            return _commandBroker.CompleteReadback(request);
         }
 
         if (request.Kind == "cancel")

@@ -45,70 +45,19 @@ public sealed class BrowserPlaybackController
             }
         }
 
-        // 2. Action Dispatch & Post-Action Verification Readback Generation
-        return request.ActionKind switch
-        {
-            BrowserActionKind.SwitchTab => ExecuteSwitchTab(request),
-            BrowserActionKind.SelectVideo => ExecuteSelectVideo(request),
-            BrowserActionKind.Play => ExecutePlay(request),
-            BrowserActionKind.Pause => ExecutePause(request),
-            BrowserActionKind.Seek => ExecuteSeek(request),
-            BrowserActionKind.SetVolume => ExecuteSetVolume(request),
-            _ => BrowserPlaybackActionResult.Failed($"unsupported_action_kind: {request.ActionKind}")
-        };
-    }
-
-    private static BrowserPlaybackActionResult ExecuteSwitchTab(BrowserPlaybackRequest request)
-    {
-        var title = string.IsNullOrWhiteSpace(request.TitlePattern) ? "Active Tab" : request.TitlePattern;
-        return BrowserPlaybackActionResult.VerifiedSuccess(
-            $"readback: Action = SwitchTab, TabId = '{request.TabId}', Title = '{title}', State = Switched");
-    }
-
-    private static BrowserPlaybackActionResult ExecuteSelectVideo(BrowserPlaybackRequest request)
-    {
-        var target = string.IsNullOrWhiteSpace(request.TargetSelector) ? "video#player" : request.TargetSelector;
-        return BrowserPlaybackActionResult.VerifiedSuccess(
-            $"readback: Action = SelectVideo, TabId = '{request.TabId}', Selector = '{target}', State = Selected");
-    }
-
-    private static BrowserPlaybackActionResult ExecutePlay(BrowserPlaybackRequest request)
-    {
-        var target = string.IsNullOrWhiteSpace(request.TargetSelector) ? "video#player" : request.TargetSelector;
-        return BrowserPlaybackActionResult.VerifiedSuccess(
-            $"readback: Action = Play, TabId = '{request.TabId}', Selector = '{target}', PlayerState = Playing");
-    }
-
-    private static BrowserPlaybackActionResult ExecutePause(BrowserPlaybackRequest request)
-    {
-        var target = string.IsNullOrWhiteSpace(request.TargetSelector) ? "video#player" : request.TargetSelector;
-        return BrowserPlaybackActionResult.VerifiedSuccess(
-            $"readback: Action = Pause, TabId = '{request.TabId}', Selector = '{target}', PlayerState = Paused");
-    }
-
-    private static BrowserPlaybackActionResult ExecuteSeek(BrowserPlaybackRequest request)
-    {
-        var position = request.PositionSeconds ?? 0.0;
-        if (position < 0)
+        if (request.ActionKind == BrowserActionKind.Seek && (request.PositionSeconds ?? 0) < 0)
         {
             return BrowserPlaybackActionResult.Failed("invalid_seek_position: Seek position cannot be negative");
         }
 
-        var target = string.IsNullOrWhiteSpace(request.TargetSelector) ? "video#player" : request.TargetSelector;
-        return BrowserPlaybackActionResult.VerifiedSuccess(
-            $"readback: Action = Seek, TabId = '{request.TabId}', Selector = '{target}', Position = {position:F1}s, PlayerState = Seeked");
-    }
-
-    private static BrowserPlaybackActionResult ExecuteSetVolume(BrowserPlaybackRequest request)
-    {
-        var volume = request.VolumePercent ?? 100;
-        if (volume is < 0 or > 100)
+        if (request.ActionKind == BrowserActionKind.SetVolume && (request.VolumePercent ?? 100) is < 0 or > 100)
         {
             return BrowserPlaybackActionResult.Failed("invalid_volume_percent: Volume must be between 0 and 100");
         }
 
-        var target = string.IsNullOrWhiteSpace(request.TargetSelector) ? "video#player" : request.TargetSelector;
-        return BrowserPlaybackActionResult.VerifiedSuccess(
-            $"readback: Action = SetVolume, TabId = '{request.TabId}', Selector = '{target}', Volume = {volume}%, PlayerState = VolumeSet");
+        // This controller has no extension action executor or independent browser
+        // readback. Refuse the command until one is wired, rather than inventing
+        // a verified result from request fields.
+        return BrowserPlaybackActionResult.Failed("browser_playback_adapter_not_configured");
     }
 }

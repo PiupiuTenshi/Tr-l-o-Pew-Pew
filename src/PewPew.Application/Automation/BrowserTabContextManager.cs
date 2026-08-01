@@ -29,7 +29,8 @@ public sealed class BrowserTabContextManager
         string elementText,
         string inputType,
         DateTimeOffset capturedAtUtc,
-        TimeSpan? ttl = null)
+        TimeSpan? ttl = null,
+        long navigationGeneration = 0)
     {
         var redactedText = UiTargetRedactor.RedactText(elementText, inputType, targetSelector);
 
@@ -44,7 +45,8 @@ public sealed class BrowserTabContextManager
             inputType,
             capturedAtUtc,
             ttl,
-            isRedacted);
+            isRedacted,
+            navigationGeneration);
 
         lock (_lock)
         {

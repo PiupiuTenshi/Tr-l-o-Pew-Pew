@@ -5,6 +5,8 @@
   "description": "Security-bound Chromium extension bridge for Pew Pew Assistant desktop application.",
   "permissions": [
     "activeTab",
+    "nativeMessaging",
+    "scripting",
     "storage"
   ],
   "background": {

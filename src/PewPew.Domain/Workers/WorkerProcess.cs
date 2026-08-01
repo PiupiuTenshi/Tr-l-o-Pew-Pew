@@ -56,11 +56,26 @@ public sealed class WorkerProcess
 
     public void Start() => Move(WorkerProcessStatus.Created, WorkerProcessStatus.Starting);
 
-    public void MarkRunning(int rootProcessId)
+    public void MarkRunning(int? rootProcessId = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rootProcessId);
+        if (rootProcessId is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rootProcessId));
+        }
 
         Move(WorkerProcessStatus.Starting, WorkerProcessStatus.Running);
+        RootProcessId = rootProcessId;
+    }
+
+    /// <summary>Associates a real OS process only after the worker adapter has started it.</summary>
+    public void AttachRootProcessId(int rootProcessId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rootProcessId);
+        if (Status != WorkerProcessStatus.Running || RootProcessId.HasValue)
+        {
+            throw new InvalidOperationException("A root process can only be attached once to a running worker.");
+        }
+
         RootProcessId = rootProcessId;
     }
 
