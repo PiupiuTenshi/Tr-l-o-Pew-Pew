@@ -1,4 +1,6 @@
 using Avalonia;
+using PewPew.Application.Voice;
+using PewPew.Infrastructure.Voice;
 using PewPew.SharedKernel.Configuration;
 
 namespace PewPew.Desktop;
@@ -22,24 +24,14 @@ public static class DesktopHost
         }
 
         var configuration = StartupConfiguration.LoadFromEnvironment();
-        var origins = (Environment.GetEnvironmentVariable("PEWPEW_BROWSER_ALLOWED_ORIGINS") ?? string.Empty)
-            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var transport = new NativeMessagingPipeServer(
-            new PewPew.Application.BrowserExtension.DesktopExtensionBridge(
-                new PewPew.Application.BrowserExtension.ExtensionOriginPolicyValidator(origins)),
-            new PewPew.Application.BrowserExtension.ExtensionOriginPolicyValidator(origins));
-        transport.Start();
         DesktopApp.ConfigureSpeechOutput(new WindowsSpeechOutput());
         DesktopApp.ConfigureSpeechTranscriber(
             new WhisperLocalSpeechTranscriber(LocalSpeechModelOptions.LoadFromEnvironment(configuration)));
-        try
-        {
-            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
-        }
-        finally
-        {
-            transport.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
+        DesktopApp.ConfigureVoiceProfileEnrollment(
+            new VoiceWakeProfileEnrollmentService(
+                new EncryptedLocalVoiceProfileSampleVault(),
+                "Pew Pew"));
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
     private static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<DesktopApp>().UsePlatformDetect();

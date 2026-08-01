@@ -424,6 +424,53 @@ public sealed class VoiceProfileSampleVaultTests
         }
     }
 
+    [Fact]
+    public async Task EncryptedVaultDoesNotReportExpiredSampleAsPresent()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "pewpew-vault-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var vault = new EncryptedLocalVoiceProfileSampleVault(tempDir);
+            var profileId = EntityId.New();
+            var result = await vault.StoreEncryptedSampleAsync(profileId, new byte[] { 0x01 }, new SampleEnvironmentLabel("quiet room"), TimeSpan.FromMilliseconds(1), TestContext.Current.CancellationToken);
+            Assert.True(result.IsSuccess);
+
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+            Assert.False(await vault.HasSampleAsync(profileId, result.Value, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task EncryptedVaultNeverPersistsPlaintextProfileKey()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "pewpew-vault-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var vault = new EncryptedLocalVoiceProfileSampleVault(tempDir);
+            var profileId = EntityId.New();
+            var result = await vault.StoreEncryptedSampleAsync(profileId, new byte[] { 0x01, 0x02 }, new SampleEnvironmentLabel("quiet room"), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+            Assert.True(result.IsSuccess);
+
+            var sampleDirectory = Path.Combine(tempDir, "VoiceProfiles", profileId.Value.ToString("N"), "samples");
+            Assert.False(File.Exists(Path.Combine(sampleDirectory, ".profile-key")));
+            Assert.True(File.Exists(Path.Combine(sampleDirectory, ".profile-key.dpapi")));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
+
 
     // ── Helpers ──────────────────────────────────────────────────────
 
