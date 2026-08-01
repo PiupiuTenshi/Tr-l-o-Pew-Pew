@@ -14,7 +14,7 @@ public sealed class DesktopExtensionBridgeTests
     [Fact]
     public void IssueSessionTokenGeneratesActiveUnexpiredToken()
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
 
         var token = bridge.IssueSessionToken(now, TimeSpan.FromMinutes(10));
@@ -28,7 +28,7 @@ public sealed class DesktopExtensionBridgeTests
     [Fact]
     public void ProcessRequestWithValidTokenAndNonceSucceeds()
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
         var token = bridge.IssueSessionToken(now);
 
@@ -50,7 +50,7 @@ public sealed class DesktopExtensionBridgeTests
     [Fact]
     public void ProcessRequestRejectsInvalidOrExpiredToken()
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
         var token = bridge.IssueSessionToken(now, TimeSpan.FromMinutes(5));
 
@@ -82,7 +82,7 @@ public sealed class DesktopExtensionBridgeTests
     [Fact]
     public void ProcessRequestRejectsReplayedNonce()
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
         var token = bridge.IssueSessionToken(now);
         var reusedNonce = "nonce_12345_unique_key";
@@ -114,7 +114,7 @@ public sealed class DesktopExtensionBridgeTests
     [Fact]
     public void ProcessRequestRejectsExceededTimestampDrift()
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
         var token = bridge.IssueSessionToken(now);
 
@@ -138,7 +138,7 @@ public sealed class DesktopExtensionBridgeTests
     [InlineData("about:blank")]
     public void ProcessRequestRejectsProhibitedOrUnapprovedOrigin(string prohibitedOrigin)
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
         var token = bridge.IssueSessionToken(now);
 
@@ -158,7 +158,7 @@ public sealed class DesktopExtensionBridgeTests
     [Fact]
     public void DisconnectInvalidatesTokenAndClearsNonces()
     {
-        var bridge = new DesktopExtensionBridge();
+        var bridge = CreateBridge();
         var now = DateTimeOffset.UtcNow;
         var token = bridge.IssueSessionToken(now);
 
@@ -181,4 +181,33 @@ public sealed class DesktopExtensionBridgeTests
         Assert.False(response.IsSuccess);
         Assert.Equal("unauthorized_caller_token", response.ReasonCode);
     }
+
+    [Fact]
+    public void ProcessRequestDeniesOriginWhenNoAllowlistIsConfigured()
+    {
+        var bridge = new DesktopExtensionBridge();
+        var now = DateTimeOffset.UtcNow;
+        var token = bridge.IssueSessionToken(now);
+        var request = new ExtensionBridgeRequest(token, Guid.NewGuid().ToString("N"), now, AllowedOrigin, "read_tab_title");
+
+        var response = bridge.ProcessRequest(request, now);
+
+        Assert.False(response.IsSuccess);
+        Assert.Equal("origin_policy_denied", response.ReasonCode);
+    }
+
+    [Fact]
+    public void NonceGuardEvictsExpiredNoncesAndBoundsUnexpiredEntries()
+    {
+        var guard = new AntiReplayNonceGuard(TimeSpan.FromSeconds(1), maximumTrackedNonces: 1);
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.True(guard.TryValidateAndRegisterNonce("first", now, now, out _));
+        Assert.False(guard.TryValidateAndRegisterNonce("second", now, now, out var capacityFailure));
+        Assert.Contains("nonce_capacity_exceeded", capacityFailure);
+        Assert.True(guard.TryValidateAndRegisterNonce("second", now.AddSeconds(2), now.AddSeconds(2), out _));
+    }
+
+    private static DesktopExtensionBridge CreateBridge() =>
+        new(new ExtensionOriginPolicyValidator([AllowedOrigin]));
 }

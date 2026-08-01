@@ -8,14 +8,19 @@ public sealed class AntiReplayNonceGuard
 {
     private static readonly TimeSpan DefaultMaxAllowedDrift = TimeSpan.FromSeconds(60);
 
-    private readonly HashSet<string> _seenNonces = new(StringComparer.Ordinal);
+    private const int DefaultMaximumTrackedNonces = 4_096;
+    private readonly Dictionary<string, DateTimeOffset> _seenNonces = new(StringComparer.Ordinal);
     private readonly object _lock = new();
 
     public TimeSpan MaxAllowedDrift { get; }
+    public int MaximumTrackedNonces { get; }
 
-    public AntiReplayNonceGuard(TimeSpan? maxAllowedDrift = null)
+    public AntiReplayNonceGuard(TimeSpan? maxAllowedDrift = null, int maximumTrackedNonces = DefaultMaximumTrackedNonces)
     {
         MaxAllowedDrift = maxAllowedDrift ?? DefaultMaxAllowedDrift;
+        MaximumTrackedNonces = maximumTrackedNonces > 0
+            ? maximumTrackedNonces
+            : throw new ArgumentOutOfRangeException(nameof(maximumTrackedNonces));
     }
 
     /// <summary>
@@ -43,14 +48,25 @@ public sealed class AntiReplayNonceGuard
 
         lock (_lock)
         {
+            foreach (var expiredNonce in _seenNonces.Where(pair => pair.Value <= nowUtc).Select(pair => pair.Key).ToArray())
+            {
+                _seenNonces.Remove(expiredNonce);
+            }
+
             var normalized = nonce.Trim();
-            if (_seenNonces.Contains(normalized))
+            if (_seenNonces.ContainsKey(normalized))
             {
                 failureReason = "replay_attack_detected: Replayed nonce rejected by security policy";
                 return false;
             }
 
-            _seenNonces.Add(normalized);
+            if (_seenNonces.Count >= MaximumTrackedNonces)
+            {
+                failureReason = "nonce_capacity_exceeded: Too many unexpired bridge requests";
+                return false;
+            }
+
+            _seenNonces.Add(normalized, nowUtc.Add(MaxAllowedDrift));
         }
 
         failureReason = null;

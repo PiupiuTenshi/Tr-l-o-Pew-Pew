@@ -19,8 +19,8 @@ public sealed class ChromiumExtensionBaselineTests
             Name: "Pew Pew Assistant Bridge",
             Version: "1.0.0",
             Description: "Security-bound bridge",
-            Permissions: ["activeTab", "scripting", "storage"],
-            HostPermissions: ["https://*/*"]);
+            Permissions: ["activeTab", "storage"],
+            HostPermissions: []);
 
         var valid = ExtensionOriginPolicyValidator.ValidateManifest(manifest, out var failureReason);
 
@@ -81,12 +81,21 @@ public sealed class ChromiumExtensionBaselineTests
     }
 
     [Fact]
-    public void IsOriginAllowedAllowsHttps()
+    public void ValidateManifestRejectsSchemeScopedWildcardHostPermission()
+    {
+        var manifest = new ChromiumExtensionManifest(3, "Dangerous", "1.0.0", "Wildcard host", ["activeTab"], ["https://*/*"]);
+
+        Assert.False(ExtensionOriginPolicyValidator.ValidateManifest(manifest, out var failureReason));
+        Assert.Contains("manifest_wildcard_host_permission_prohibited", failureReason);
+    }
+
+    [Fact]
+    public void IsOriginAllowedDeniesHttpsWithoutExplicitAllowlist()
     {
         var validator = new ExtensionOriginPolicyValidator();
 
-        Assert.True(validator.IsOriginAllowed("https://example.com/page"));
-        Assert.True(validator.IsOriginAllowed("https://github.com"));
+        Assert.False(validator.IsOriginAllowed("https://example.com/page"));
+        Assert.False(validator.IsOriginAllowed("https://github.com"));
         Assert.False(validator.IsOriginAllowed("http://example.com")); // Plain HTTP denied by default
     }
 
@@ -143,7 +152,9 @@ public sealed class ChromiumExtensionBaselineTests
         var description = root.GetProperty("description").GetString()!;
 
         var permissions = root.GetProperty("permissions").EnumerateArray().Select(e => e.GetString()!).ToList();
-        var hostPermissions = root.GetProperty("host_permissions").EnumerateArray().Select(e => e.GetString()!).ToList();
+        var hostPermissions = root.TryGetProperty("host_permissions", out var hostPermissionsNode)
+            ? hostPermissionsNode.EnumerateArray().Select(e => e.GetString()!).ToList()
+            : [];
 
         var manifest = new ChromiumExtensionManifest(manifestVersion, name, version, description, permissions, hostPermissions);
 
@@ -153,6 +164,7 @@ public sealed class ChromiumExtensionBaselineTests
         Assert.Equal(3, manifestVersion);
         Assert.DoesNotContain("<all_urls>", permissions);
         Assert.DoesNotContain("<all_urls>", hostPermissions);
+        Assert.Empty(hostPermissions);
     }
 
     private static string FindSolutionDirectory()
