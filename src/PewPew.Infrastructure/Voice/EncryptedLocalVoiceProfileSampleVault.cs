@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Runtime.Versioning;
 using PewPew.Application.Voice;
 using PewPew.Domain.Voice;
 using PewPew.SharedKernel.Primitives;
@@ -33,8 +34,11 @@ public sealed class EncryptedLocalVoiceProfileSampleVault : IVoiceProfileSampleV
     private const string SamplesSubdirectory = "samples";
     private const string MetadataExtension = ".meta";
     private const string SampleExtension = ".enc";
-    private const string KeyFileName = ".profile-key";
+    private const string ProtectedKeyFileName = ".profile-key.dpapi";
+    private const string LegacyKeyFileName = ".profile-key";
     private const int KeySizeBytes = 32; // AES-256
+    private const int NonceSizeBytes = 12;
+    private const int TagSizeBytes = 16;
 
     private readonly string _basePath;
 
@@ -67,12 +71,19 @@ public sealed class EncryptedLocalVoiceProfileSampleVault : IVoiceProfileSampleV
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (!OperatingSystem.IsWindows())
+        {
+            return Result.Failure<ProfileSampleId>(
+                new DomainError("vault.platform_not_supported", "Voice profile sample storage requires Windows user data protection."));
+        }
+
         try
         {
             var sampleId = ProfileSampleId.New();
             var profileDir = GetProfileSamplesDirectory(profileId);
             Directory.CreateDirectory(profileDir);
 
+            RemoveInsecureLegacyMaterial(profileDir);
             var key = GetOrCreateProfileKey(profileDir);
             var encryptedBytes = Encrypt(sampleData.Span, key);
 
@@ -222,38 +233,64 @@ public sealed class EncryptedLocalVoiceProfileSampleVault : IVoiceProfileSampleV
 
         var profileDir = GetProfileSamplesDirectory(profileId);
         var samplePath = GetSampleFilePath(profileDir, sampleId);
-        return Task.FromResult(File.Exists(samplePath));
+        var metadataPath = GetMetadataFilePath(profileDir, sampleId);
+        if (!File.Exists(samplePath) || !TryReadExpiry(metadataPath, out var expiry))
+        {
+            return Task.FromResult(false);
+        }
+
+        if (DateTimeOffset.UtcNow < expiry)
+        {
+            return Task.FromResult(true);
+        }
+
+        DeleteFileIfExists(samplePath);
+        DeleteFileIfExists(metadataPath);
+        return Task.FromResult(false);
     }
 
     // ── Encryption helpers ───────────────────────────────────────────
 
+    [SupportedOSPlatform("windows")]
     private static byte[] GetOrCreateProfileKey(string profileDir)
     {
-        var keyPath = Path.Combine(profileDir, KeyFileName);
+        var keyPath = Path.Combine(profileDir, ProtectedKeyFileName);
         if (File.Exists(keyPath))
         {
-            return File.ReadAllBytes(keyPath);
+            return ProtectedData.Unprotect(File.ReadAllBytes(keyPath), null, DataProtectionScope.CurrentUser);
         }
 
         var key = RandomNumberGenerator.GetBytes(KeySizeBytes);
-        File.WriteAllBytes(keyPath, key);
+        File.WriteAllBytes(keyPath, ProtectedData.Protect(key, null, DataProtectionScope.CurrentUser));
         return key;
     }
 
     private static byte[] Encrypt(ReadOnlySpan<byte> plaintext, byte[] key)
     {
-        using var aes = Aes.Create();
-        aes.Key = key;
-        aes.GenerateIV();
+        var nonce = RandomNumberGenerator.GetBytes(NonceSizeBytes);
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[TagSizeBytes];
+        using var aes = new AesGcm(key, TagSizeBytes);
+        aes.Encrypt(nonce, plaintext, ciphertext, tag);
 
-        using var encryptor = aes.CreateEncryptor();
-        var ciphertext = encryptor.TransformFinalBlock(plaintext.ToArray(), 0, plaintext.Length);
-
-        // Prepend IV to ciphertext for later decryption
-        var result = new byte[aes.IV.Length + ciphertext.Length];
-        aes.IV.CopyTo(result, 0);
-        ciphertext.CopyTo(result, aes.IV.Length);
+        var result = new byte[nonce.Length + tag.Length + ciphertext.Length];
+        nonce.CopyTo(result, 0);
+        tag.CopyTo(result, nonce.Length);
+        ciphertext.CopyTo(result, nonce.Length + tag.Length);
         return result;
+    }
+
+    private static void RemoveInsecureLegacyMaterial(string profileDir)
+    {
+        if (!File.Exists(Path.Combine(profileDir, LegacyKeyFileName)))
+        {
+            return;
+        }
+
+        foreach (var path in Directory.GetFiles(profileDir))
+        {
+            DeleteFileIfExists(path);
+        }
     }
 
     // ── Path helpers ─────────────────────────────────────────────────

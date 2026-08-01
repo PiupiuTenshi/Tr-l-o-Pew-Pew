@@ -16,6 +16,7 @@
     <ProjectReference Include="../PewPew.Contracts/PewPew.Contracts.csproj" />
     <ProjectReference Include="../PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
     <ProjectReference Include="..\PewPew.Application\PewPew.Application.csproj" />
+    <ProjectReference Include="..\PewPew.Infrastructure\PewPew.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.desktop.local.json" CopyToOutputDirectory="PreserveNewest" />

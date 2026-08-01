@@ -143,7 +143,14 @@ public sealed class VoiceWakeProfile
 
     public void RevokeVoiceConsent(DateTimeOffset now)
     {
-        Require(VoiceWakeProfileStatus.Active, VoiceWakeProfileStatus.Disabled, VoiceWakeProfileStatus.Retraining);
+        Require(
+            VoiceWakeProfileStatus.Draft,
+            VoiceWakeProfileStatus.CollectingSamples,
+            VoiceWakeProfileStatus.Training,
+            VoiceWakeProfileStatus.Validating,
+            VoiceWakeProfileStatus.Active,
+            VoiceWakeProfileStatus.Disabled,
+            VoiceWakeProfileStatus.Retraining);
         ClearRawSampleRetention();
         _samples.Clear();
         ConsentRevokedAtUtc = now;
@@ -304,4 +311,3 @@ public sealed class VoiceWakeProfile
         }
     }
 }
-

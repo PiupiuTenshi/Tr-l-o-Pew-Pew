@@ -9,7 +9,10 @@ using Avalonia.Media;
 using Avalonia.Themes.Fluent;
 using PewPew.Application.Speech;
 using PewPew.Application.Voice;
+using PewPew.Domain.Voice;
 using PewPew.SharedKernel.Configuration;
+using System.Diagnostics;
+using System.Security.Cryptography;
 
 namespace PewPew.Desktop;
 
@@ -17,6 +20,7 @@ public sealed class DesktopApp : Avalonia.Application
 {
     private static ILocalSpeechOutput _speechOutput = new UnavailableSpeechOutput();
     private static ILocalSpeechTranscriber _speechTranscriber = new UnavailableSpeechTranscriber();
+    private static VoiceWakeProfileEnrollmentService? _voiceProfileEnrollment;
     private TrayIcon? _trayIcon;
     private bool _isExiting;
 
@@ -28,6 +32,11 @@ public sealed class DesktopApp : Avalonia.Application
     public static void ConfigureSpeechTranscriber(ILocalSpeechTranscriber speechTranscriber)
     {
         _speechTranscriber = speechTranscriber ?? throw new ArgumentNullException(nameof(speechTranscriber));
+    }
+
+    public static void ConfigureVoiceProfileEnrollment(VoiceWakeProfileEnrollmentService enrollment)
+    {
+        _voiceProfileEnrollment = enrollment ?? throw new ArgumentNullException(nameof(enrollment));
     }
 
     public override void Initialize()
@@ -278,73 +287,473 @@ public sealed class DesktopApp : Avalonia.Application
             }
         };
 
-        var content = new Border
+        var enrollmentStatus = new TextBlock
         {
-            Padding = new Thickness(24),
-            Child = new ScrollViewer
+            TextWrapping = TextWrapping.Wrap
+        };
+        AutomationProperties.SetName(enrollmentStatus, "Voice profile enrollment status");
+        var enrollmentConsent = new CheckBox
+        {
+            Content = "I consent to collect short local voice samples for a wake profile. Samples are encrypted, expire in 15 minutes, and can be deleted below.",
+            IsEnabled = _voiceProfileEnrollment is not null
+        };
+        AutomationProperties.SetName(enrollmentConsent, "Voice profile enrollment consent");
+        var environmentPicker = new ComboBox
+        {
+            ItemsSource = new[] { "Quiet room", "Normal room", "Noisy room", "Headset" },
+            SelectedIndex = 0,
+            IsEnabled = false
+        };
+        AutomationProperties.SetName(environmentPicker, "Voice sample environment");
+        var beginEnrollment = new Button { Content = "Grant consent and begin enrollment", IsEnabled = false };
+        var startSample = new Button { Content = "Start sample recording", IsEnabled = false };
+        var saveSample = new Button { Content = "Save encrypted sample", IsEnabled = false };
+        var cancelEnrollment = new Button { Content = "Cancel enrollment and delete samples", IsEnabled = false };
+        var withdrawConsent = new Button { Content = "Withdraw consent and delete profile", IsEnabled = false };
+        AutomationProperties.SetName(beginEnrollment, "Begin voice profile enrollment");
+        AutomationProperties.SetName(startSample, "Start explicit voice profile sample recording");
+        AutomationProperties.SetName(saveSample, "Save encrypted voice profile sample");
+        AutomationProperties.SetName(cancelEnrollment, "Cancel voice profile enrollment and delete samples");
+        AutomationProperties.SetName(withdrawConsent, "Withdraw voice profile consent and delete profile");
+        var enrollmentStopwatch = new Stopwatch();
+        var enrollmentCaptureActive = false;
+
+        void UpdateEnrollmentControls(string? notice = null)
+        {
+            var enrollment = _voiceProfileEnrollment;
+            if (enrollment is null)
             {
-                Content = new StackPanel
+                enrollmentStatus.Text = "Voice-profile enrollment is unavailable. Text and push-to-talk remain available.";
+                return;
+            }
+
+            var snapshot = enrollment.Snapshot;
+            enrollmentStatus.Text = notice ?? $"Profile: {snapshot.Status}; samples: {snapshot.SampleCount}/{snapshot.SampleLimit}. Biometric matching is not active until P02-T21 validation.";
+            beginEnrollment.IsEnabled = !enrollmentCaptureActive && snapshot.Status == VoiceWakeProfileStatus.Draft && enrollmentConsent.IsChecked == true;
+            environmentPicker.IsEnabled = snapshot.Status == VoiceWakeProfileStatus.CollectingSamples && !enrollmentCaptureActive;
+            startSample.IsEnabled = snapshot.Status == VoiceWakeProfileStatus.CollectingSamples && !enrollmentCaptureActive && !speechInput.IsListening;
+            saveSample.IsEnabled = enrollmentCaptureActive && speechInput.IsListening;
+            cancelEnrollment.IsEnabled = snapshot.Status == VoiceWakeProfileStatus.CollectingSamples || enrollmentCaptureActive;
+            withdrawConsent.IsEnabled = snapshot.HasConsent || snapshot.Status == VoiceWakeProfileStatus.CollectingSamples;
+        }
+
+        async Task CancelEnrollmentCaptureAsync()
+        {
+            if (enrollmentCaptureActive && speechInput.IsListening)
+            {
+                await speechInput.CancelAsync();
+            }
+
+            enrollmentCaptureActive = false;
+            enrollmentStopwatch.Reset();
+            UpdateAudioControls();
+        }
+
+        void LockGeneralSpeechControlsForEnrollmentCapture()
+        {
+            startListening.IsEnabled = false;
+            checkWakePhrase.IsEnabled = false;
+            stopAndTranscribe.IsEnabled = false;
+            cancelListening.IsEnabled = false;
+        }
+
+        enrollmentConsent.IsCheckedChanged += (_, _) => UpdateEnrollmentControls();
+        beginEnrollment.Click += (_, _) =>
+        {
+            if (_voiceProfileEnrollment is null || enrollmentConsent.IsChecked != true)
+            {
+                UpdateEnrollmentControls("Consent is required before collecting a voice sample.");
+                return;
+            }
+
+            var result = _voiceProfileEnrollment.BeginEnrollment(DateTimeOffset.UtcNow);
+            UpdateEnrollmentControls(result.IsSuccess
+                ? "Consent recorded. Choose an environment, then record a short 3–5 second sample."
+                : result.Error.Message);
+        };
+        startSample.Click += async (_, _) =>
+        {
+            if (_voiceProfileEnrollment is null)
+            {
+                return;
+            }
+
+            await speechInput.StartAsync(CancellationToken.None);
+            enrollmentCaptureActive = speechInput.IsListening;
+            if (enrollmentCaptureActive)
+            {
+                enrollmentStopwatch.Restart();
+                UpdateEnrollmentControls("Recording a local enrollment sample. Press Save encrypted sample when finished; no transcript is retained.");
+            }
+            else
+            {
+                UpdateEnrollmentControls(speechInput.StatusLabel);
+            }
+
+            UpdateAudioControls();
+            if (enrollmentCaptureActive)
+            {
+                LockGeneralSpeechControlsForEnrollmentCapture();
+            }
+        };
+        saveSample.Click += async (_, _) =>
+        {
+            if (_voiceProfileEnrollment is null || !enrollmentCaptureActive)
+            {
+                return;
+            }
+
+            await using var audio = await speechInput.StopCaptureAsync(CancellationToken.None);
+            enrollmentCaptureActive = false;
+            enrollmentStopwatch.Stop();
+            if (audio is null)
+            {
+                UpdateEnrollmentControls("No sample was saved. Microphone capture ended before audio was available.");
+                UpdateAudioControls();
+                return;
+            }
+
+            byte[]? sampleBytes = null;
+            try
+            {
+                sampleBytes = audio.ToArray();
+                var environment = new SampleEnvironmentLabel(environmentPicker.SelectedItem as string ?? "Normal room");
+                var duration = enrollmentStopwatch.Elapsed;
+                var result = await _voiceProfileEnrollment.StoreCapturedSampleAsync(
+                    sampleBytes,
+                    environment,
+                    duration,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None);
+                UpdateEnrollmentControls(result.IsSuccess
+                    ? "Encrypted local sample saved. Record additional samples in different environments; matching remains inactive until P02-T21."
+                    : result.Error.Message);
+            }
+            finally
+            {
+                if (sampleBytes is not null)
                 {
-                    Spacing = 16,
+                    CryptographicOperations.ZeroMemory(sampleBytes);
+                }
+
+                if (audio.TryGetBuffer(out var buffer))
+                {
+                    CryptographicOperations.ZeroMemory(buffer.Array!.AsSpan(buffer.Offset, buffer.Count));
+                }
+            }
+
+            UpdateAudioControls();
+        };
+        cancelEnrollment.Click += async (_, _) =>
+        {
+            if (_voiceProfileEnrollment is null)
+            {
+                return;
+            }
+
+            await CancelEnrollmentCaptureAsync();
+            var result = await _voiceProfileEnrollment.CancelEnrollmentAsync(CancellationToken.None);
+            UpdateEnrollmentControls(result.IsSuccess
+                ? "Enrollment cancelled. All encrypted samples for this profile were deleted."
+                : result.Error.Message);
+        };
+        withdrawConsent.Click += async (_, _) =>
+        {
+            if (_voiceProfileEnrollment is null)
+            {
+                return;
+            }
+
+            await CancelEnrollmentCaptureAsync();
+            var result = await _voiceProfileEnrollment.WithdrawConsentAndDeleteAsync(DateTimeOffset.UtcNow, CancellationToken.None);
+            if (result.IsSuccess)
+            {
+                _voiceProfileEnrollment.ResetAfterDeletion("Pew Pew");
+                enrollmentConsent.IsChecked = false;
+            }
+
+            UpdateEnrollmentControls(result.IsSuccess
+                ? "Consent withdrawn and local voice profile data deleted."
+                : result.Error.Message);
+        };
+        UpdateEnrollmentControls();
+
+        // ── Section helper: creates a titled card with colored header ──
+        static Border CreateSection(string title, string helpText, Color headerColor, params Control[] children)
+        {
+            var header = new Border
+            {
+                Background = new SolidColorBrush(headerColor),
+                CornerRadius = new CornerRadius(8, 8, 0, 0),
+                Padding = new Thickness(14, 8),
+                Child = new TextBlock
+                {
+                    Text = title,
+                    FontSize = 15,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = Brushes.White
+                }
+            };
+            var help = new TextBlock
+            {
+                Text = helpText,
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.75,
+                FontSize = 12,
+                Margin = new Thickness(0, 2, 0, 8)
+            };
+            var body = new StackPanel { Spacing = 10 };
+            body.Children.Add(help);
+            foreach (var child in children)
+            {
+                body.Children.Add(child);
+            }
+
+            return new Border
+            {
+                BorderBrush = new SolidColorBrush(Color.Parse("#30FFFFFF")),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Margin = new Thickness(0, 0, 0, 8),
+                Child = new StackPanel
+                {
                     Children =
                     {
-                        new TextBlock
+                        header,
+                        new Border
                         {
-                            Text = "Pew Pew Assistant",
-                            FontSize = 28,
-                            FontWeight = FontWeight.Bold
-                        },
-                    new Border
-                    {
-                        Background = new SolidColorBrush(Color.Parse("#183A5A")),
-                        CornerRadius = new CornerRadius(8),
-                        Padding = new Thickness(12),
-                        Child = new TextBlock
-                        {
-                            Text = shell.ModeLabel,
-                            Foreground = Brushes.White
+                            Padding = new Thickness(14, 10),
+                            Child = body
                         }
-                    },
-                    new TextBlock { Text = "Status", FontWeight = FontWeight.SemiBold },
-                    statusText,
-                    new TextBlock { Text = "Speech", FontWeight = FontWeight.SemiBold },
-                    speechStatus,
-                    speakResponse,
-                    stopSpeaking,
-                    new TextBlock { Text = "Voice", FontWeight = FontWeight.SemiBold },
-                    voicePicker,
-                    voiceStatus,
-                    new TextBlock
-                    {
-                        Text = "Start listening grants microphone consent only for this session. Stop and transcribe processes audio locally, then discards it.",
-                        TextWrapping = TextWrapping.Wrap
-                    },
+                    }
+                }
+            };
+        }
+
+        // Helper to create a ScrollViewer with vertical scrolling enabled for small windows
+        static ScrollViewer CreateTabScrollViewer(Control content)
+        {
+            return new ScrollViewer
+            {
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                Content = content
+            };
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  TAB 1 — 💬 Trợ lý (Main Assistant: Input, Voice, Response)
+        // ════════════════════════════════════════════════════════════════
+        var assistantTab = CreateTabScrollViewer(new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 8),
+            Children =
+            {
+                // Mode indicator
+                new Border
+                {
+                    Background = new SolidColorBrush(Color.Parse("#183A5A")),
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(10, 6),
+                    Margin = new Thickness(0, 0, 0, 4),
+                    Child = new TextBlock { Text = shell.ModeLabel, Foreground = Brushes.White }
+                },
+
+                // Text input
+                CreateSection(
+                    "⌨  Nhập lệnh  —  Command Input",
+                    "Nhập yêu cầu bằng văn bản. Nhấn Ctrl+Enter hoặc nút Submit để gửi.",
+                    Color.Parse("#2C3E50"),
+                    input,
+                    submit
+                ),
+
+                // Microphone quick control
+                CreateSection(
+                    "🎙  Giọng nói  —  Voice Input",
+                    "Nhấn \"Start listening\" để bật micro, nói lệnh, rồi nhấn \"Stop and transcribe\" để chuyển thành văn bản.",
+                    Color.Parse("#1A5276"),
                     audioStatus,
                     new StackPanel
                     {
                         Orientation = Orientation.Horizontal,
                         Spacing = 8,
-                        Children = { startListening, checkWakePhrase, stopAndTranscribe, cancelListening }
-                    },
-                    new TextBlock { Text = "Text command", FontWeight = FontWeight.SemiBold },
-                    input,
-                    new TextBlock { Text = "Press Ctrl+Enter to submit from the keyboard." },
-                    submit,
-                    new Separator(),
-                    new TextBlock { Text = "Response", FontWeight = FontWeight.SemiBold },
-                        responseText
+                        Children = { startListening, stopAndTranscribe, cancelListening }
                     }
-                }
+                ),
+
+                // Response
+                CreateSection(
+                    "💬  Kết quả  —  Response",
+                    "Phản hồi từ trợ lý và trạng thái hoạt động được cập nhật tự động tại đây.",
+                    Color.Parse("#6C3483"),
+                    new TextBlock { Text = "Trạng thái  (Status)", FontWeight = FontWeight.SemiBold },
+                    statusText,
+                    new Separator(),
+                    new TextBlock { Text = "Phản hồi  (Response)", FontWeight = FontWeight.SemiBold },
+                    responseText
+                )
             }
+        });
+
+        // ════════════════════════════════════════════════════════════════
+        //  TAB 2 — ⚙ Cài đặt (Settings: System Voice Selection)
+        // ════════════════════════════════════════════════════════════════
+        var settingsTab = CreateTabScrollViewer(new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 8),
+            Children =
+            {
+                CreateSection(
+                    "🔊  Giọng đọc hệ thống  —  System Voice",
+                    "Chọn giọng đọc hệ thống Windows cho trợ lý. Thay đổi có hiệu lực ngay cho lần đọc kế tiếp.",
+                    Color.Parse("#1A5276"),
+                    voicePicker,
+                    voiceStatus
+                ),
+
+                CreateSection(
+                    "🛡  Chính sách bảo mật & Xử lý cục bộ  —  Local Privacy Policy",
+                    "• Mọi xử lý giọng nói, nhận diện từ khóa và lệnh đều diễn ra cục bộ (Local-only) trên máy tính của bạn.\n"
+                    + "• Âm thanh thu từ micro chỉ tồn tại tạm thời trong bộ nhớ RAM và được giải phóng ngay sau khi xử lý xong.\n"
+                    + "• Không có dữ liệu âm thanh hay văn bản nào được gửi lên server cloud.",
+                    Color.Parse("#283747")
+                )
+            }
+        });
+
+        // ════════════════════════════════════════════════════════════════
+        //  TAB 3 — 🧪 Developer (Developer Mode: Advanced Testing Suite)
+        // ════════════════════════════════════════════════════════════════
+        var devTestPanel = new StackPanel
+        {
+            Spacing = 8,
+            IsVisible = false,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+
+        // 1. Wake phrase testing card
+        devTestPanel.Children.Add(CreateSection(
+            "🎙  Test 1: Kiểm tra nhận diện từ khóa Wake Phrase (\"Pew Pew\")",
+            "Công cụ kiểm tra trực tiếp khả năng nhận diện từ khóa kích hoạt:\n"
+            + "1. Nhấn \"Start listening\" ở tab Trợ lý (hoặc bật micro).\n"
+            + "2. Nói từ khóa \"Pew Pew\" rõ ràng.\n"
+            + "3. Nhấn \"Check wake phrase\" dưới đây để kiểm tra kết quả nhận diện cục bộ.",
+            Color.Parse("#1E8449"),
+            new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Children = { checkWakePhrase }
+            }
+        ));
+
+        // 2. Voice profile enrollment testing card
+        devTestPanel.Children.Add(CreateSection(
+            "🎤  Test 2: Đăng ký Profile giọng nói sinh trắc học  (Voice Profile Enrollment — Local Only)",
+            "Công cụ thử nghiệm thu thập mẫu giọng nói ngắn (3–5s) ở nhiều môi trường để huấn luyện profile cá nhân:\n"
+            + "• Tick ô đồng ý → Chọn môi trường → Ghi mẫu → Lưu mã hóa AES-256.\n"
+            + "• Mẫu tự hết hạn sau 15 phút. Matching chưa kích hoạt cho đến P02-T21.",
+            Color.Parse("#1E6B4F"),
+            enrollmentConsent,
+            enrollmentStatus,
+            environmentPicker,
+            beginEnrollment,
+            new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Children = { startSample, saveSample, cancelEnrollment, withdrawConsent }
+            }
+        ));
+
+        // 3. Speech output test card
+        devTestPanel.Children.Add(CreateSection(
+            "🔈  Test 4: Phát âm thanh phản hồi  (Speech Output Test)",
+            "Thử nghiệm đọc to phản hồi bằng giọng đọc hiện tại.",
+            Color.Parse("#5B2C6F"),
+            speechStatus,
+            new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 8,
+                Children = { speakResponse, stopSpeaking }
+            }
+        ));
+
+        var devToggle = new CheckBox
+        {
+            Content = "🔧 Bật chế độ Developer (Developer Mode) — Hiển thị toàn bộ công cụ kiểm tra",
+            IsChecked = false,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        devToggle.IsCheckedChanged += (_, _) =>
+        {
+            devTestPanel.IsVisible = devToggle.IsChecked == true;
+        };
+
+        var devTab = CreateTabScrollViewer(new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 8),
+            Children =
+            {
+                CreateSection(
+                    "🧪  Chế độ Developer  —  Developer Mode",
+                    "Chế độ này dành riêng cho kiểm thử và gỡ lỗi toàn bộ các tính năng (Wake phrase, Voice profile, Browser media, Speech output).\n"
+                    + "Mặc định các công cụ kiểm tra được ẩn để giữ giao diện gọn gàng. Tick vào ô bên dưới để bật.",
+                    Color.Parse("#D35400"),
+                    devToggle
+                ),
+                devTestPanel
+            }
+        });
+
+        // ════════════════════════════════════════════════════════════════
+        //  MAIN LAYOUT — Grid & TabControl for Responsive Resizing
+        // ════════════════════════════════════════════════════════════════
+        var tabs = new TabControl
+        {
+            TabStripPlacement = Dock.Top,
+            Items =
+            {
+                new TabItem { Header = "💬  Trợ lý", Content = assistantTab },
+                new TabItem { Header = "⚙  Cài đặt", Content = settingsTab },
+                new TabItem { Header = "🧪  Developer", Content = devTab }
+            }
+        };
+
+        var titleHeader = new TextBlock
+        {
+            Text = "Pew Pew Assistant",
+            FontSize = 26,
+            FontWeight = FontWeight.Bold,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        Grid.SetRow(titleHeader, 0);
+        Grid.SetRow(tabs, 1);
+
+        var mainGrid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*"),
+            Children = { titleHeader, tabs }
+        };
+
+        var content = new Border
+        {
+            Padding = new Thickness(16),
+            Child = mainGrid
         };
 
         var window = new Window
         {
             Title = "Pew Pew Assistant",
             Width = 800,
-            Height = 560,
-            MinWidth = 560,
-            MinHeight = 420,
+            Height = 600,
+            MinWidth = 520,
+            MinHeight = 380,
             Content = content
         };
         window.Closing += (_, eventArgs) =>

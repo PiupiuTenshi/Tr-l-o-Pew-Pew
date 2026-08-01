@@ -4,6 +4,7 @@
     <RootNamespace>PewPew.Infrastructure</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
     <ProjectReference Include="../PewPew.Application/PewPew.Application.csproj" />
     <ProjectReference Include="../PewPew.Domain/PewPew.Domain.csproj" />
     <ProjectReference Include="../PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
