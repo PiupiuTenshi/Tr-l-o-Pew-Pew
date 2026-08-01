@@ -116,6 +116,34 @@ public sealed class WorkerActionDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAndExecuteAsyncUsesEmergencyStopCancellationTokenWithoutFabricatingPid()
+    {
+        var (request, skillPackage, stopper, registry) = CreateValidContext();
+
+        var result = await WorkerActionDispatcher.DispatchAndExecuteAsync(
+            request,
+            skillPackage,
+            WorkerResourceQuota.Default,
+            stopper,
+            registry,
+            async (worker, token) =>
+            {
+                Assert.Null(worker.RootProcessId);
+                var stop = await registry.StopAsync(request.Task.Id);
+                Assert.False(stop.IsStopped);
+                Assert.Equal("root_process_not_attached", stop.FailureReason);
+                token.ThrowIfCancellationRequested();
+                return WorkerExecutionOutcome.Success("unreachable");
+            },
+            DateTimeOffset.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsExecutedSuccessfully);
+        Assert.Equal("task_cancelled", result.ReasonCode);
+        Assert.Equal(ActionTaskStatus.Cancelled, request.Task.Status);
+    }
+
+    [Fact]
     public async Task DispatchAndExecuteAsyncSkillCapabilityDeniedPath()
     {
         var (request, _, stopper, registry) = CreateValidContext();

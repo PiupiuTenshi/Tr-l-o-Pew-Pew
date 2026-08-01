@@ -19,7 +19,7 @@ public sealed class ChromiumExtensionBaselineTests
             Name: "Pew Pew Assistant Bridge",
             Version: "1.0.0",
             Description: "Security-bound bridge",
-            Permissions: ["activeTab", "storage"],
+            Permissions: ["activeTab", "nativeMessaging", "storage"],
             HostPermissions: []);
 
         var valid = ExtensionOriginPolicyValidator.ValidateManifest(manifest, out var failureReason);
@@ -164,6 +164,7 @@ public sealed class ChromiumExtensionBaselineTests
         Assert.Equal(3, manifestVersion);
         Assert.DoesNotContain("<all_urls>", permissions);
         Assert.DoesNotContain("<all_urls>", hostPermissions);
+        Assert.Contains("nativeMessaging", permissions);
         Assert.Empty(hostPermissions);
     }
 

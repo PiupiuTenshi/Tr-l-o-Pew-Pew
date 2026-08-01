@@ -22,6 +22,19 @@ public sealed class UiTargetSnapshot
     public bool IsRedacted { get; private set; }
     public string? InvalidationReason { get; private set; }
 
+    /// <summary>
+    /// Monotonically increasing version counter. Incremented on each mutation
+    /// (e.g. redaction update). Used for optimistic concurrency binding.
+    /// </summary>
+    public int Version { get; private set; }
+
+    /// <summary>
+    /// Browser navigation generation counter at capture time. A navigation
+    /// (e.g. page reload, URL change) increments this value in the extension,
+    /// invalidating snapshots captured at a previous generation.
+    /// </summary>
+    public long NavigationGeneration { get; }
+
     private UiTargetSnapshot(
         Guid snapshotId,
         string tabId,
@@ -32,7 +45,8 @@ public sealed class UiTargetSnapshot
         string inputType,
         DateTimeOffset capturedAtUtc,
         DateTimeOffset expiresAtUtc,
-        bool isRedacted)
+        bool isRedacted,
+        long navigationGeneration)
     {
         SnapshotId = snapshotId;
         TabId = tabId;
@@ -45,6 +59,8 @@ public sealed class UiTargetSnapshot
         ExpiresAtUtc = expiresAtUtc;
         Status = UiTargetSnapshotStatus.Active;
         IsRedacted = isRedacted;
+        Version = 1;
+        NavigationGeneration = navigationGeneration;
     }
 
     public static UiTargetSnapshot Create(
@@ -56,7 +72,8 @@ public sealed class UiTargetSnapshot
         string inputType,
         DateTimeOffset capturedAtUtc,
         TimeSpan? ttl = null,
-        bool isRedacted = false)
+        bool isRedacted = false,
+        long navigationGeneration = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tabId);
         ArgumentException.ThrowIfNullOrWhiteSpace(origin);
@@ -80,7 +97,8 @@ public sealed class UiTargetSnapshot
             inputType ?? string.Empty,
             capturedAtUtc,
             expiresAtUtc,
-            isRedacted);
+            isRedacted,
+            navigationGeneration);
     }
 
     public bool IsStale(DateTimeOffset nowUtc)
@@ -92,6 +110,7 @@ public sealed class UiTargetSnapshot
     {
         ElementText = redactedText ?? string.Empty;
         IsRedacted = true;
+        Version++;
     }
 
     public void Invalidate(string reason)

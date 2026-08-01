@@ -70,16 +70,19 @@ public static class WorkerActionDispatcher
         // 3. Instantiate WorkerProcess via WorkerSandboxManager
         var worker = WorkerSandboxManager.CreateWorker(request.Task.Id, request.DeviceId, quota, now);
         worker.Start();
-        worker.MarkRunning(rootProcessId: 1000 + Random.Shared.Next(1, 8000));
+        // The worker adapter attaches a real PID after starting an OS process.
+        // Never fabricate a PID: Emergency Stop must not target another process.
+        worker.MarkRunning();
 
         // 4. Register in LocalWorkerOwnershipRegistry for Emergency Stop / cancellation tracking
         var registrationToken = registry.Register(request.Task, worker, stopper);
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, registrationToken);
 
 
         // 5. Execute worker payload & verify post-action outcome
         try
         {
-            var outcome = await executionPayload(worker, cancellationToken).ConfigureAwait(false);
+            var outcome = await executionPayload(worker, linkedCancellation.Token).ConfigureAwait(false);
 
             ReconcileTaskOutcome(request.Task, worker, outcome);
 
@@ -127,6 +130,10 @@ public static class WorkerActionDispatcher
                 AuditRecord: policyResult.AuditRecord,
                 Worker: worker,
                 Outcome: WorkerExecutionOutcome.Failed(ex.Message));
+        }
+        finally
+        {
+            registry.Deregister(request.Task.Id);
         }
     }
 

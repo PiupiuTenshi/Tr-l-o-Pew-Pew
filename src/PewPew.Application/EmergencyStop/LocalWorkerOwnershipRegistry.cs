@@ -55,6 +55,11 @@ public sealed class LocalWorkerOwnershipRegistry
             }
 
             registration.Cancellation.Cancel();
+            if (!registration.Worker.RootProcessId.HasValue)
+            {
+                return new LocalWorkerStopResult(taskId, false, "worker_cancellation_requested_before_process_attach", "root_process_not_attached");
+            }
+
             inFlight = registration.StopAttempt ??= registration.Stopper.StopProcessTreeAsync(registration.Worker, CancellationToken.None);
         }
 
@@ -93,6 +98,18 @@ public sealed class LocalWorkerOwnershipRegistry
         lock (_gate)
         {
             return _stopRequestedTaskIds.Contains(taskId);
+        }
+    }
+
+    /// <summary>Removes a completed worker registration and disposes its cancellation source.</summary>
+    public void Deregister(EntityId taskId)
+    {
+        lock (_gate)
+        {
+            if (_registrations.Remove(taskId, out var registration))
+            {
+                registration.Cancellation.Dispose();
+            }
         }
     }
 

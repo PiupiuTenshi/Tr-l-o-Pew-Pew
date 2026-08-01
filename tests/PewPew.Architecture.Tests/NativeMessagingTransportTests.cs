@@ -25,6 +25,78 @@ public sealed class NativeMessagingTransportTests
     }
 
     [Fact]
+    public void ProtocolRequiresReadbackBindingAndRejectsArbitraryBrowserCommands()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var request = BoundRequest("action_readback", "token", "nonce", now, Origin);
+        Assert.False(NativeMessagingTransportProtocol.TryValidate(request, out var missingReason));
+        Assert.Equal("transport_readback_binding_required", missingReason);
+
+        var command = new NativeMessagingBrowserCommand(
+            "command-1", "token", Origin, "tab-1", "snapshot-1", 1, 0,
+            "execute_javascript", "AABB", "authorization-1");
+        Assert.False(NativeMessagingTransportProtocol.TryValidateBrowserCommand(command, out var actionReason));
+        Assert.Equal("browser_command_binding_invalid", actionReason);
+    }
+
+    [Fact]
+    public void ProtocolAcceptsOnlyFullyBoundTypedMediaCommand()
+    {
+        var command = new NativeMessagingBrowserCommand(
+            "command-1", "token", Origin, "tab-1", "snapshot-1", 1, 0,
+            "pause", new string('A', 64), "authorization-1");
+
+        Assert.True(NativeMessagingTransportProtocol.TryValidateBrowserCommand(command, out var reason));
+        Assert.Equal(string.Empty, reason);
+    }
+
+    [Fact]
+    public async Task BrokerDeliversOnlyMatchingBoundCommandAndAcceptsMatchingReadback()
+    {
+        var broker = new NativeMessagingBrowserCommandBroker();
+        var command = new NativeMessagingBrowserCommand(
+            "command-1", "token", Origin, "tab-1", "snapshot-1", 1, 0,
+            "pause", new string('A', 64), "authorization-1");
+        Assert.True(broker.TryQueue(command, out var queueReason));
+        Assert.Equal(string.Empty, queueReason);
+
+        var poll = BoundRequest("command_poll", "token", "nonce-poll", DateTimeOffset.UtcNow, Origin) with { SnapshotId = null };
+        var delivery = broker.Poll(poll);
+        Assert.Same(command, delivery.BrowserCommand);
+
+        var readback = BoundRequest("action_readback", "token", "nonce-readback", DateTimeOffset.UtcNow, Origin) with
+        {
+            CommandId = command.CommandId,
+            SnapshotVersion = command.SnapshotVersion,
+            NavigationGeneration = command.NavigationGeneration,
+            PayloadHash = command.PayloadHash,
+            ReadbackStatus = "observed"
+        };
+        Assert.True(broker.CompleteReadback(readback).IsSuccess);
+        Assert.True((await broker.WaitForReadbackAsync(command.CommandId, CancellationToken.None)).IsSuccess);
+    }
+
+    [Fact]
+    public void BrokerRejectsReadbackWithChangedPayloadBinding()
+    {
+        var broker = new NativeMessagingBrowserCommandBroker();
+        var command = new NativeMessagingBrowserCommand(
+            "command-1", "token", Origin, "tab-1", "snapshot-1", 1, 0,
+            "pause", new string('A', 64), "authorization-1");
+        Assert.True(broker.TryQueue(command, out _));
+
+        var readback = BoundRequest("action_readback", "token", "nonce", DateTimeOffset.UtcNow, Origin) with
+        {
+            CommandId = command.CommandId,
+            SnapshotVersion = command.SnapshotVersion,
+            NavigationGeneration = command.NavigationGeneration,
+            PayloadHash = new string('B', 64),
+            ReadbackStatus = "observed"
+        };
+        Assert.Equal("browser_readback_binding_denied", broker.CompleteReadback(readback).ReasonCode);
+    }
+
+    [Fact]
     public void ServerIssuesEphemeralTokenThenRejectsReplayAndOriginEscape()
     {
         var now = DateTimeOffset.UtcNow;

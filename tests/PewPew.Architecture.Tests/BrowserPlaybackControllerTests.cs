@@ -13,7 +13,7 @@ public sealed class BrowserPlaybackControllerTests
     private static readonly string SampleTabId = "tab_browser_100";
 
     [Fact]
-    public void ExecuteActionSwitchTabReturnsVerifiedReadback()
+    public void ExecuteActionFailsClosedUntilBrowserAdapterIsConfigured()
     {
         var request = new BrowserPlaybackRequest(
             TabId: SampleTabId,
@@ -22,16 +22,14 @@ public sealed class BrowserPlaybackControllerTests
 
         var result = BrowserPlaybackController.ExecuteAction(request);
 
-        Assert.True(result.IsSuccess);
+        Assert.False(result.IsSuccess);
         Assert.False(result.RequiresClarification);
-        Assert.NotNull(result.ReadbackEvidence);
-        Assert.Contains("SwitchTab", result.ReadbackEvidence);
-        Assert.Contains(SampleTabId, result.ReadbackEvidence);
-        Assert.Contains("YouTube Video Page", result.ReadbackEvidence);
+        Assert.Null(result.ReadbackEvidence);
+        Assert.Equal("browser_playback_adapter_not_configured", result.FailureReason);
     }
 
     [Fact]
-    public void ExecuteActionSelectVideoReturnsVerifiedReadback()
+    public void ExecuteActionSelectVideoFailsClosedUntilBrowserAdapterIsConfigured()
     {
         var request = new BrowserPlaybackRequest(
             TabId: SampleTabId,
@@ -40,14 +38,12 @@ public sealed class BrowserPlaybackControllerTests
 
         var result = BrowserPlaybackController.ExecuteAction(request);
 
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(result.ReadbackEvidence);
-        Assert.Contains("SelectVideo", result.ReadbackEvidence);
-        Assert.Contains("video#main-player", result.ReadbackEvidence);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("browser_playback_adapter_not_configured", result.FailureReason);
     }
 
     [Fact]
-    public void ExecuteActionPlayAndPauseReturnsVerifiedReadback()
+    public void ExecuteActionPlayAndPauseFailClosedUntilBrowserAdapterIsConfigured()
     {
         var playRequest = new BrowserPlaybackRequest(
             TabId: SampleTabId,
@@ -56,8 +52,8 @@ public sealed class BrowserPlaybackControllerTests
 
         var playResult = BrowserPlaybackController.ExecuteAction(playRequest);
 
-        Assert.True(playResult.IsSuccess);
-        Assert.Contains("PlayerState = Playing", playResult.ReadbackEvidence);
+        Assert.False(playResult.IsSuccess);
+        Assert.Equal("browser_playback_adapter_not_configured", playResult.FailureReason);
 
         var pauseRequest = new BrowserPlaybackRequest(
             TabId: SampleTabId,
@@ -66,12 +62,12 @@ public sealed class BrowserPlaybackControllerTests
 
         var pauseResult = BrowserPlaybackController.ExecuteAction(pauseRequest);
 
-        Assert.True(pauseResult.IsSuccess);
-        Assert.Contains("PlayerState = Paused", pauseResult.ReadbackEvidence);
+        Assert.False(pauseResult.IsSuccess);
+        Assert.Equal("browser_playback_adapter_not_configured", pauseResult.FailureReason);
     }
 
     [Fact]
-    public void ExecuteActionSeekAppliesPositionReadback()
+    public void ExecuteActionSeekFailsClosedUntilBrowserAdapterIsConfigured()
     {
         var request = new BrowserPlaybackRequest(
             TabId: SampleTabId,
@@ -81,13 +77,12 @@ public sealed class BrowserPlaybackControllerTests
 
         var result = BrowserPlaybackController.ExecuteAction(request);
 
-        Assert.True(result.IsSuccess);
-        Assert.Contains("Position = 124.5s", result.ReadbackEvidence);
-        Assert.Contains("PlayerState = Seeked", result.ReadbackEvidence);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("browser_playback_adapter_not_configured", result.FailureReason);
     }
 
     [Fact]
-    public void ExecuteActionSetVolumeAppliesVolumeReadback()
+    public void ExecuteActionSetVolumeFailsClosedUntilBrowserAdapterIsConfigured()
     {
         var request = new BrowserPlaybackRequest(
             TabId: SampleTabId,
@@ -97,9 +92,8 @@ public sealed class BrowserPlaybackControllerTests
 
         var result = BrowserPlaybackController.ExecuteAction(request);
 
-        Assert.True(result.IsSuccess);
-        Assert.Contains("Volume = 75%", result.ReadbackEvidence);
-        Assert.Contains("PlayerState = VolumeSet", result.ReadbackEvidence);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("browser_playback_adapter_not_configured", result.FailureReason);
     }
 
     [Fact]

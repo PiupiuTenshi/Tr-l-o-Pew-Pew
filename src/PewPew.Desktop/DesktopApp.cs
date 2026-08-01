@@ -8,6 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Themes.Fluent;
 using PewPew.Application.Speech;
+using PewPew.Application.Automation;
 using PewPew.Application.Voice;
 using PewPew.Domain.Voice;
 using PewPew.SharedKernel.Configuration;
@@ -21,6 +22,8 @@ public sealed class DesktopApp : Avalonia.Application
     private static ILocalSpeechOutput _speechOutput = new UnavailableSpeechOutput();
     private static ILocalSpeechTranscriber _speechTranscriber = new UnavailableSpeechTranscriber();
     private static VoiceWakeProfileEnrollmentService? _voiceProfileEnrollment;
+    private static BrowserMediaActionCoordinator? _browserMedia;
+    private static IVerifiedBrowserActionChannel? _browserChannel;
     private TrayIcon? _trayIcon;
     private bool _isExiting;
 
@@ -37,6 +40,12 @@ public sealed class DesktopApp : Avalonia.Application
     public static void ConfigureVoiceProfileEnrollment(VoiceWakeProfileEnrollmentService enrollment)
     {
         _voiceProfileEnrollment = enrollment ?? throw new ArgumentNullException(nameof(enrollment));
+    }
+
+    public static void ConfigureBrowserMedia(BrowserMediaActionCoordinator coordinator, IVerifiedBrowserActionChannel channel)
+    {
+        _browserMedia = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        _browserChannel = channel ?? throw new ArgumentNullException(nameof(channel));
     }
 
     public override void Initialize()
@@ -478,6 +487,44 @@ public sealed class DesktopApp : Avalonia.Application
         };
         UpdateEnrollmentControls();
 
+        var browserStatus = new TextBlock { Text = "Connect the Edge extension, then choose a media action. Each action needs a separate confirmation.", TextWrapping = TextWrapping.Wrap };
+        var browserConfirm = new Button { Content = "Confirm browser action", IsEnabled = false };
+        var browserCancel = new Button { Content = "Cancel pending browser action", IsEnabled = false };
+        var browserAction = new ComboBox { ItemsSource = new[] { "play", "pause", "mute", "unmute" }, SelectedIndex = 1 };
+        BrowserMediaActionPrompt? pendingBrowserAction = null;
+        var requestBrowserAction = new Button { Content = "Request browser media action" };
+        AutomationProperties.SetName(requestBrowserAction, "Request a single-use browser media action");
+        AutomationProperties.SetName(browserConfirm, "Confirm the pending browser media action");
+        requestBrowserAction.Click += (_, _) =>
+        {
+            var action = browserAction.SelectedItem as string ?? "pause";
+            pendingBrowserAction = _browserMedia?.RequestSingleUseAction(action, DateTimeOffset.UtcNow);
+            browserConfirm.IsEnabled = pendingBrowserAction is not null;
+            browserCancel.IsEnabled = pendingBrowserAction is not null;
+            browserStatus.Text = pendingBrowserAction is null
+                ? "No fresh active Edge tab context is available. Connect the extension and focus an HTTP(S) media tab."
+                : $"Confirm {pendingBrowserAction.Action} for the active tab. This single-use request expires at {pendingBrowserAction.ExpiresAtUtc.LocalDateTime:HH:mm:ss}.";
+        };
+        browserConfirm.Click += async (_, _) =>
+        {
+            if (pendingBrowserAction is null || _browserMedia is null || _browserChannel is null)
+            {
+                return;
+            }
+            browserConfirm.IsEnabled = false;
+            browserCancel.IsEnabled = false;
+            var result = await _browserMedia.ConfirmAndExecuteAsync(pendingBrowserAction.RequestId, _browserChannel, DateTimeOffset.UtcNow, CancellationToken.None);
+            browserStatus.Text = $"Browser action outcome: {result.Outcome} ({result.ReasonCode}).";
+            pendingBrowserAction = null;
+        };
+        browserCancel.Click += (_, _) =>
+        {
+            pendingBrowserAction = null;
+            browserConfirm.IsEnabled = false;
+            browserCancel.IsEnabled = false;
+            browserStatus.Text = "Pending browser action cancelled before dispatch. No browser side effect was sent.";
+        };
+
         // ── Section helper: creates a titled card with colored header ──
         static Border CreateSection(string title, string helpText, Color headerColor, params Control[] children)
         {
@@ -669,7 +716,20 @@ public sealed class DesktopApp : Avalonia.Application
             }
         ));
 
-        // 3. Speech output test card
+        // 3. Browser media action testing card
+        devTestPanel.Children.Add(CreateSection(
+            "🌐  Test 3: Điều khiển Trình duyệt  (Browser Media Action)",
+            "Công cụ thử nghiệm gửi lệnh điều khiển media đến Extension trình duyệt Chrome/Edge:\n"
+            + "• Chọn hành động → Gửi yêu cầu single-use → Xác nhận gửi lệnh.",
+            Color.Parse("#7D6608"),
+            browserStatus,
+            browserAction,
+            requestBrowserAction,
+            browserConfirm,
+            browserCancel
+        ));
+
+        // 4. Speech output test card
         devTestPanel.Children.Add(CreateSection(
             "🔈  Test 4: Phát âm thanh phản hồi  (Speech Output Test)",
             "Thử nghiệm đọc to phản hồi bằng giọng đọc hiện tại.",
