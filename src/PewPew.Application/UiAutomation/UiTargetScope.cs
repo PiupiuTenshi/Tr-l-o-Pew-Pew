@@ -9,9 +9,12 @@ public sealed record UiTargetScope(
     string? WindowTitlePattern = null,
     string? AutomationId = null,
     string? ControlTypeName = null,
-    string? ElementName = null)
+    string? ElementName = null,
+    int? ProcessId = null)
 {
-    public UiTargetScope(string processName) : this(processName, null, null, null, null) { }
+    public UiTargetScope(string processName) : this(processName, null, null, null, null, null) { }
 
-    public string TargetId => $"{ProcessName}:{AutomationId ?? ElementName ?? "window"}";
+    public string TargetId => ProcessId is { } processId
+        ? $"{ProcessName}:{AutomationId ?? ElementName ?? "window"}:pid-{processId.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+        : $"{ProcessName}:{AutomationId ?? ElementName ?? "window"}";
 }

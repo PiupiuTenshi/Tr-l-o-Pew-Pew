@@ -6,12 +6,12 @@ namespace PewPew.Architecture.Tests;
 
 /// <summary>
 /// Unit and security tests for <see cref="WindowsAccessibilityAdapter"/> and <see cref="UiAutomationTargetAllowlist"/>.
-/// Verifies process allowlisting, post-action readback evidence, and strict rejection of UAC consent dialogs.
+/// Verifies that the legacy adapter path is disabled and the allowlist remains fail-closed.
 /// </summary>
 public sealed class WindowsAccessibilityAdapterTests
 {
     [Fact]
-    public async Task ExecuteUiActionAsyncClickOnAllowlistedProcessSucceedsWithReadback()
+    public async Task LegacyControlPathDoesNotFabricateAllowlistedActionSuccess()
     {
         var adapter = new WindowsAccessibilityAdapter();
         var target = new UiTargetScope("notepad", WindowTitlePattern: "Untitled*", AutomationId: "btnSave");
@@ -19,14 +19,13 @@ public sealed class WindowsAccessibilityAdapterTests
         var result = await adapter.ExecuteUiActionAsync(
             target, UiActionKind.Click, valuePayload: null, TestContext.Current.CancellationToken);
 
-        Assert.True(result.IsSuccess);
-        Assert.Contains("Action = Click", result.ActionEvidence);
-        Assert.Contains("notepad:btnSave", result.ActionEvidence);
-        Assert.Null(result.FailureReason);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("uia_legacy_control_path_disabled", result.FailureReason);
+        Assert.Empty(result.ActionEvidence);
     }
 
     [Fact]
-    public async Task ExecuteUiActionAsyncSetTextSucceedsWithReadback()
+    public async Task LegacyControlPathDoesNotExposeTypedPayload()
     {
         var adapter = new WindowsAccessibilityAdapter();
         var target = new UiTargetScope("notepad", WindowTitlePattern: "*", AutomationId: "txtBody");
@@ -34,26 +33,26 @@ public sealed class WindowsAccessibilityAdapterTests
         var result = await adapter.ExecuteUiActionAsync(
             target, UiActionKind.SetText, valuePayload: "Sample text input", TestContext.Current.CancellationToken);
 
-        Assert.True(result.IsSuccess);
-        Assert.Contains("Action = SetText", result.ActionEvidence);
-        Assert.Contains("Sample text input", result.ActionEvidence);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("uia_legacy_control_path_disabled", result.FailureReason);
+        Assert.DoesNotContain("Sample text input", result.ActionEvidence);
     }
 
     [Fact]
-    public async Task ExecuteUiActionAsyncFocusAndReadTextSucceedWithReadback()
+    public async Task LegacyControlPathDoesNotPretendFocusOrReadSucceeded()
     {
         var adapter = new WindowsAccessibilityAdapter();
         var target = new UiTargetScope("explorer", ElementName: "FolderList");
 
         var focusResult = await adapter.ExecuteUiActionAsync(
             target, UiActionKind.Focus, valuePayload: null, TestContext.Current.CancellationToken);
-        Assert.True(focusResult.IsSuccess);
-        Assert.Contains("Focused", focusResult.ActionEvidence);
+        Assert.False(focusResult.IsSuccess);
+        Assert.Equal("uia_legacy_control_path_disabled", focusResult.FailureReason);
 
         var readResult = await adapter.ExecuteUiActionAsync(
             target, UiActionKind.ReadText, valuePayload: "Documents", TestContext.Current.CancellationToken);
-        Assert.True(readResult.IsSuccess);
-        Assert.Contains("Documents", readResult.ActionEvidence);
+        Assert.False(readResult.IsSuccess);
+        Assert.Equal("uia_legacy_control_path_disabled", readResult.FailureReason);
     }
 
     [Theory]
@@ -68,7 +67,7 @@ public sealed class WindowsAccessibilityAdapterTests
             target, UiActionKind.Click, valuePayload: null, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
-        Assert.Contains("target_process_prohibited", result.FailureReason);
+        Assert.Equal("uia_legacy_control_path_disabled", result.FailureReason);
         Assert.Empty(result.ActionEvidence);
     }
 
@@ -86,7 +85,7 @@ public sealed class WindowsAccessibilityAdapterTests
             target, UiActionKind.Click, valuePayload: null, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
-        Assert.Contains("target_process_prohibited", result.FailureReason);
+        Assert.Equal("uia_legacy_control_path_disabled", result.FailureReason);
     }
 
     [Fact]
@@ -99,7 +98,7 @@ public sealed class WindowsAccessibilityAdapterTests
             target, UiActionKind.Click, valuePayload: null, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
-        Assert.Contains("target_process_not_allowlisted", result.FailureReason);
+        Assert.Equal("uia_legacy_control_path_disabled", result.FailureReason);
     }
 
     [Fact]
@@ -109,19 +108,15 @@ public sealed class WindowsAccessibilityAdapterTests
         var adapter = new WindowsAccessibilityAdapter(allowlist);
         var target = new UiTargetScope("mycustomapp");
 
-        // Before allowlist registration
-        var beforeResult = await adapter.ExecuteUiActionAsync(
-            target, UiActionKind.Click, valuePayload: null, TestContext.Current.CancellationToken);
-        Assert.False(beforeResult.IsSuccess);
-
         // Allow process
         var registered = allowlist.AllowProcess("mycustomapp");
         Assert.True(registered);
 
-        // After allowlist registration
+        // The old adapter remains disabled even after allowlist registration.
         var afterResult = await adapter.ExecuteUiActionAsync(
             target, UiActionKind.Click, valuePayload: null, TestContext.Current.CancellationToken);
-        Assert.True(afterResult.IsSuccess);
+        Assert.False(afterResult.IsSuccess);
+        Assert.Equal("uia_legacy_control_path_disabled", afterResult.FailureReason);
 
         // Attempting to allow UAC dialog 'consent.exe' must be rejected
         var allowedUac = allowlist.AllowProcess("consent.exe");
