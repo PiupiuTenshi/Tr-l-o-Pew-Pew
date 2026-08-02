@@ -17,7 +17,8 @@ public static class WindowsUiAutomationControlPath
 
         if (!IsBound(request, valuePayload))
         {
-            return new(WindowsUiAutomationOutcome.Denied, "uia_command_authorization_binding_denied", null);
+            var denied = Actions.ActionDispatchService.RejectBeforeDispatch(request.Authorization, "uia_command_authorization_binding_denied");
+            return new(WindowsUiAutomationOutcome.Denied, denied.ReasonCode, denied.AuditRecord.PolicyResult);
         }
 
         var authorization = Actions.ActionDispatchService.Dispatch(request.Authorization);

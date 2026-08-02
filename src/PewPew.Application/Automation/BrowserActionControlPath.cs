@@ -29,7 +29,8 @@ public static class BrowserActionControlPath
             !string.Equals(request.Authorization.RequestedScope.Resource, request.Command.TargetOrigin, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(request.Authorization.RequestedScope.Action, request.Command.ActionKind, StringComparison.Ordinal))
         {
-            return new(BrowserExecutorOutcome.Denied, "browser_command_authorization_binding_denied", null);
+            var denied = ActionDispatchService.RejectBeforeDispatch(request.Authorization, "browser_command_authorization_binding_denied");
+            return new(BrowserExecutorOutcome.Denied, denied.ReasonCode, denied.AuditRecord.PolicyResult);
         }
 
         var authorization = ActionDispatchService.Dispatch(request.Authorization);
@@ -60,6 +61,11 @@ public static class BrowserActionControlPath
         {
             request.Authorization.Task.Cancel();
             return new(BrowserExecutorOutcome.Denied, "cancelled", authorization.AuditRecord.PolicyResult);
+        }
+        catch (InvalidOperationException exception) when (exception.Message.StartsWith("browser_", StringComparison.Ordinal))
+        {
+            request.Authorization.Task.Fail(exception.Message);
+            return new(BrowserExecutorOutcome.Failed, exception.Message, authorization.AuditRecord.PolicyResult);
         }
     }
 
