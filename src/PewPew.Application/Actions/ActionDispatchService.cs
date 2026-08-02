@@ -23,6 +23,14 @@ public sealed record ActionDispatchResult(bool IsAllowed, string ReasonCode, Aud
 
 public static class ActionDispatchService
 {
+    /// <summary>Creates sealed metadata-only audit evidence for a rejected bound command without dispatching its task.</summary>
+    public static ActionDispatchResult RejectBeforeDispatch(ActionDispatchRequest request, string reasonCode)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
+        return Denied(request, reasonCode);
+    }
+
     public static ActionDispatchResult Dispatch(ActionDispatchRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
