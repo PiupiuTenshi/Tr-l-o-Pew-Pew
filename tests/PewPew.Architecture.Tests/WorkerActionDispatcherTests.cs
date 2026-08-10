@@ -144,6 +144,38 @@ public sealed class WorkerActionDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAndExecuteAsyncBindsWorkerToExactPermissionForRevocationCascade()
+    {
+        var (request, skillPackage, stopper, registry) = CreateValidContext();
+        var payloadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var dispatch = WorkerActionDispatcher.DispatchAndExecuteAsync(
+            request,
+            skillPackage,
+            WorkerResourceQuota.Default,
+            stopper,
+            registry,
+            async (_, token) =>
+            {
+                payloadStarted.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                return WorkerExecutionOutcome.Success("unreachable");
+            },
+            DateTimeOffset.UtcNow,
+            TestContext.Current.CancellationToken);
+
+        await payloadStarted.Task;
+        var stops = await registry.StopByPermissionAsync(request.PermissionGrant.Id);
+        var result = await dispatch;
+
+        Assert.Single(stops);
+        Assert.Equal(request.Task.Id, stops.Single().TaskId);
+        Assert.False(stops.Single().IsStopped); // No adapter attached a real PID.
+        Assert.Equal("task_cancelled", result.ReasonCode);
+        Assert.Equal(ActionTaskStatus.Cancelled, request.Task.Status);
+    }
+
+    [Fact]
     public async Task DispatchAndExecuteAsyncSkillCapabilityDeniedPath()
     {
         var (request, _, stopper, registry) = CreateValidContext();
