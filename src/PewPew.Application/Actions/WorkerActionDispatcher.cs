@@ -75,7 +75,11 @@ public static class WorkerActionDispatcher
         worker.MarkRunning();
 
         // 4. Register in LocalWorkerOwnershipRegistry for Emergency Stop / cancellation tracking
-        var registrationToken = registry.Register(request.Task, worker, stopper);
+        var registrationToken = registry.Register(
+            request.Task,
+            worker,
+            stopper,
+            new WorkerOwnershipBinding(request.PermissionGrant.Id, skillPackage.Id));
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, registrationToken);
 
 

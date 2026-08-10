@@ -14,7 +14,11 @@ public sealed class LocalWorkerOwnershipRegistry
     private readonly Dictionary<EntityId, Registration> _registrations = [];
     private readonly HashSet<EntityId> _stopRequestedTaskIds = [];
 
-    public CancellationToken Register(ActionTask task, WorkerProcess worker, ILocalWorkerProcessStopper stopper)
+    public CancellationToken Register(
+        ActionTask task,
+        WorkerProcess worker,
+        ILocalWorkerProcessStopper stopper,
+        WorkerOwnershipBinding? binding = null)
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(worker);
@@ -32,7 +36,7 @@ public sealed class LocalWorkerOwnershipRegistry
                 throw new InvalidOperationException("An emergency-stopped task cannot be registered or resumed.");
             }
 
-            if (!_registrations.TryAdd(task.Id, new Registration(task, worker, stopper)))
+            if (!_registrations.TryAdd(task.Id, new Registration(task, worker, stopper, binding)))
             {
                 throw new InvalidOperationException("A worker is already registered for this action task.");
             }
@@ -101,6 +105,20 @@ public sealed class LocalWorkerOwnershipRegistry
         }
     }
 
+    /// <summary>
+    /// Requests cancellation and process-tree stop for workers bound to exactly
+    /// one permission grant. It never scans by capability or wildcard scope.
+    /// </summary>
+    public Task<IReadOnlyList<LocalWorkerStopResult>> StopByPermissionAsync(EntityId permissionGrantId) =>
+        StopBoundAsync(binding => binding.PermissionGrantId == permissionGrantId);
+
+    /// <summary>
+    /// Requests cancellation and process-tree stop for workers bound to exactly
+    /// one skill package. It does not stop unbound or unrelated workers.
+    /// </summary>
+    public Task<IReadOnlyList<LocalWorkerStopResult>> StopBySkillAsync(EntityId skillPackageId) =>
+        StopBoundAsync(binding => binding.SkillPackageId == skillPackageId);
+
     /// <summary>Removes a completed worker registration and disposes its cancellation source.</summary>
     public void Deregister(EntityId taskId)
     {
@@ -113,15 +131,45 @@ public sealed class LocalWorkerOwnershipRegistry
         }
     }
 
-    private sealed class Registration(ActionTask task, WorkerProcess worker, ILocalWorkerProcessStopper stopper)
+    private async Task<IReadOnlyList<LocalWorkerStopResult>> StopBoundAsync(Func<WorkerOwnershipBinding, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        EntityId[] taskIds;
+        lock (_gate)
+        {
+            taskIds = _registrations.Values
+                .Where(registration => registration.Binding is not null && predicate(registration.Binding))
+                .Select(registration => registration.Task.Id)
+                .ToArray();
+        }
+
+        var results = new List<LocalWorkerStopResult>(taskIds.Length);
+        foreach (var taskId in taskIds)
+        {
+            results.Add(await StopAsync(taskId).ConfigureAwait(false));
+        }
+
+        return results;
+    }
+
+    private sealed class Registration(
+        ActionTask task,
+        WorkerProcess worker,
+        ILocalWorkerProcessStopper stopper,
+        WorkerOwnershipBinding? binding)
     {
         public ActionTask Task { get; } = task;
         public WorkerProcess Worker { get; } = worker;
         public ILocalWorkerProcessStopper Stopper { get; } = stopper;
+        public WorkerOwnershipBinding? Binding { get; } = binding;
         public CancellationTokenSource Cancellation { get; } = new();
         public Task<LocalWorkerProcessStopResult>? StopAttempt { get; set; }
     }
 }
+
+/// <summary>Exact authorization/package identity bound at worker registration time.</summary>
+public sealed record WorkerOwnershipBinding(EntityId PermissionGrantId, EntityId SkillPackageId);
 
 public sealed record LocalWorkerStopResult(EntityId TaskId, bool IsStopped, string Evidence, string? FailureReason)
 {
