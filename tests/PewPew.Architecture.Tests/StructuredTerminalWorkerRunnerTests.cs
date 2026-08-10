@@ -1,0 +1,199 @@
+using PewPew.Application.Actions;
+using PewPew.Application.Terminal;
+using PewPew.Domain.Terminal;
+using PewPew.Domain.Workers;
+using PewPew.Infrastructure.Terminal;
+using PewPew.SharedKernel.Primitives;
+using Xunit;
+
+namespace PewPew.Architecture.Tests;
+
+public sealed class StructuredTerminalWorkerRunnerTests
+{
+    [Fact]
+    public async Task LocalAdapterRunsAllowlistedDotnetWithoutShellAndReportsMetadata()
+    {
+        var processId = 0;
+        var adapter = new LocalTerminalProcessRunner();
+
+        var result = await adapter.RunAsync(
+            new TerminalProcessLaunchRequest(
+                "dotnet",
+                ["--version"],
+                Directory.GetCurrentDirectory(),
+                WorkerResourceQuota.Default),
+            startedProcessId => processId = startedProcessId,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(processId > 0);
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(result.OutputBytes > 0);
+        Assert.False(result.OutputLimitExceeded);
+    }
+
+    [Fact]
+    public async Task BuildWorkflowBindsRealPidAndReturnsMetadataOnlySuccessEvidence()
+    {
+        var workflow = ActiveWorkflow("dotnet_build", ["build"]);
+        var worker = RunningWorker();
+        var runner = new StubProcessRunner(new TerminalProcessRunResult(0, 42, false, 30, TimeSpan.FromMilliseconds(12)));
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow,
+            null,
+            workflow.ExpectedSha256Hash,
+            worker,
+            runner,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Completed, outcome.Status);
+        Assert.Equal(7357, worker.RootProcessId);
+        Assert.Contains("terminal_exit_code_0", outcome.VerificationEvidence);
+        Assert.DoesNotContain("build output", outcome.VerificationEvidence, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("dotnet", runner.Request!.ExecutablePath);
+        Assert.Equal(["build"], runner.Request.Arguments);
+    }
+
+    [Fact]
+    public async Task NonzeroExitFailsWithoutReportingRawOutput()
+    {
+        var workflow = ActiveWorkflow("dotnet_test", ["test"]);
+        var worker = RunningWorker();
+        var runner = new StubProcessRunner(new TerminalProcessRunResult(1, 81, false, 20, TimeSpan.FromSeconds(1)));
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, workflow.ExpectedSha256Hash, worker, runner, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Failed, outcome.Status);
+        Assert.Equal("terminal_exit_code_1", outcome.FailureReason);
+    }
+
+    [Fact]
+    public async Task OutputQuotaBreachIsUnknownAndNeverEligibleForAutomaticRetry()
+    {
+        var workflow = ActiveWorkflow("dotnet_start", ["run"]);
+        var worker = RunningWorker(new WorkerResourceQuota(maxOutputSizeBytes: 16));
+        var runner = new StubProcessRunner(new TerminalProcessRunResult(0, 17, true, 20, TimeSpan.FromSeconds(1)));
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, workflow.ExpectedSha256Hash, worker, runner, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Unknown, outcome.Status);
+        Assert.Equal("terminal_output_or_resource_quota_exceeded", outcome.FailureReason);
+        Assert.Equal(WorkerProcessStatus.Failed, worker.Status);
+    }
+
+    [Fact]
+    public async Task CancellationPropagatesToProcessRunnerAndProducesCancelledOutcome()
+    {
+        var workflow = ActiveWorkflow("dotnet_stop", ["test"]);
+        var worker = RunningWorker();
+        var runner = new StubProcessRunner(exception: new OperationCanceledException());
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, workflow.ExpectedSha256Hash, worker, runner, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Cancelled, outcome.Status);
+        Assert.Equal("terminal_execution_cancelled", outcome.FailureReason);
+        Assert.False(runner.ReceivedCancellation);
+    }
+
+    [Fact]
+    public async Task MismatchedWorkflowHashStopsBeforeAnyProcessStarts()
+    {
+        var workflow = ActiveWorkflow("dotnet_build", ["build"]);
+        var worker = RunningWorker();
+        var runner = new StubProcessRunner(new TerminalProcessRunResult(0, 0, false, 1, TimeSpan.Zero));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, new string('0', 64), worker, runner, TestContext.Current.CancellationToken));
+
+        Assert.Null(runner.Request);
+        Assert.Equal(TerminalWorkflowStatus.PolicyRejected, workflow.Status);
+    }
+
+    [Fact]
+    public async Task ProcessStartFailureReturnsRedactedReasonCode()
+    {
+        var workflow = ActiveWorkflow("dotnet_build", ["build"]);
+        var worker = RunningWorker();
+        var runner = new StubProcessRunner(
+            exception: new System.ComponentModel.Win32Exception("sensitive machine path"),
+            startProcess: false);
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, workflow.ExpectedSha256Hash, worker, runner, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Failed, outcome.Status);
+        Assert.Equal("terminal_process_start_failed", outcome.FailureReason);
+        Assert.DoesNotContain("sensitive", outcome.FailureReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TerminalWorkflowDefinition ActiveWorkflow(string name, IReadOnlyList<string> arguments)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var workflow = TerminalWorkflowService.CreateDraft(
+            name,
+            "1.0.0",
+            "dotnet",
+            "E:\\Project\\PewPew",
+            arguments,
+            Array.Empty<string>(),
+            TerminalWorkflowRiskLevel.Medium,
+            nowUtc: now);
+        workflow.Submit(now.AddSeconds(1));
+        Assert.True(workflow.Approve(workflow.ExpectedSha256Hash, now.AddSeconds(2)));
+        workflow.Activate(now.AddSeconds(3));
+        return workflow;
+    }
+
+    private static WorkerProcess RunningWorker(WorkerResourceQuota? quota = null)
+    {
+        var worker = new WorkerProcess(
+            EntityId.New(),
+            EntityId.New(),
+            EntityId.New(),
+            DateTimeOffset.UtcNow.AddMinutes(1),
+            quota);
+        worker.Start();
+        worker.MarkRunning();
+        return worker;
+    }
+
+    private sealed class StubProcessRunner : ITerminalProcessRunner
+    {
+        private readonly TerminalProcessRunResult? _result;
+        private readonly Exception? _exception;
+
+        private readonly bool _startProcess;
+
+        public StubProcessRunner(TerminalProcessRunResult? result = null, Exception? exception = null, bool startProcess = true)
+        {
+            _result = result;
+            _exception = exception;
+            _startProcess = startProcess;
+        }
+
+        public TerminalProcessLaunchRequest? Request { get; private set; }
+
+        public bool ReceivedCancellation { get; private set; }
+
+        public Task<TerminalProcessRunResult> RunAsync(
+            TerminalProcessLaunchRequest request,
+            Action<int> onProcessStarted,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            ReceivedCancellation = cancellationToken.IsCancellationRequested;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (_startProcess)
+            {
+                onProcessStarted(7357);
+            }
+
+            return _exception is not null
+                ? Task.FromException<TerminalProcessRunResult>(_exception)
+                : Task.FromResult(_result!);
+        }
+    }
+}
