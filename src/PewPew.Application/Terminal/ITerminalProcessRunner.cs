@@ -8,6 +8,12 @@ namespace PewPew.Application.Terminal;
 /// </summary>
 public interface ITerminalProcessRunner
 {
+    /// <summary>
+    /// True only when the adapter can enforce the workflow's network policy at
+    /// the operating-system boundary. Declaring false makes execution fail closed.
+    /// </summary>
+    bool ProvidesNetworkIsolation { get; }
+
     Task<TerminalProcessRunResult> RunAsync(
         TerminalProcessLaunchRequest request,
         Action<int> onProcessStarted,
@@ -19,7 +25,8 @@ public sealed record TerminalProcessLaunchRequest(
     string ExecutablePath,
     IReadOnlyList<string> Arguments,
     string WorkingDirectory,
-    WorkerResourceQuota Quota);
+    WorkerResourceQuota Quota,
+    IReadOnlyDictionary<string, string>? Environment = null);
 
 /// <summary>
 /// Metadata-only process result. Output content is intentionally not retained by
@@ -31,3 +38,9 @@ public sealed record TerminalProcessRunResult(
     bool OutputLimitExceeded,
     int PeakRamMb,
     TimeSpan Duration);
+
+/// <summary>Metadata-only denial raised by an adapter before a process is started.</summary>
+public sealed class TerminalProcessBoundaryViolationException(string reasonCode) : InvalidOperationException(reasonCode)
+{
+    public string ReasonCode { get; } = reasonCode;
+}

@@ -11,24 +11,59 @@ namespace PewPew.Architecture.Tests;
 public sealed class StructuredTerminalWorkerRunnerTests
 {
     [Fact]
-    public async Task LocalAdapterRunsAllowlistedDotnetWithoutShellAndReportsMetadata()
+    public async Task LocalAdapterFailsClosedWhenNetworkIsolationIsUnavailable()
     {
         var processId = 0;
         var adapter = new LocalTerminalProcessRunner();
 
-        var result = await adapter.RunAsync(
+        var exception = await Assert.ThrowsAsync<TerminalProcessBoundaryViolationException>(() => adapter.RunAsync(
             new TerminalProcessLaunchRequest(
                 "dotnet",
                 ["--version"],
                 Directory.GetCurrentDirectory(),
                 WorkerResourceQuota.Default),
             startedProcessId => processId = startedProcessId,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
 
-        Assert.True(processId > 0);
-        Assert.Equal(0, result.ExitCode);
-        Assert.True(result.OutputBytes > 0);
-        Assert.False(result.OutputLimitExceeded);
+        Assert.Equal("terminal_network_isolation_unavailable", exception.ReasonCode);
+        Assert.Equal(0, processId);
+    }
+
+    [Fact]
+    public async Task LocalAdapterRejectsTraversalAndEnvironmentInjectionBeforeProcessStart()
+    {
+        var adapter = new LocalTerminalProcessRunner();
+        var traversal = Path.Combine(Directory.GetCurrentDirectory(), "..");
+        var environment = new Dictionary<string, string> { ["SECRET_TOKEN"] = "must_not_cross_boundary" };
+
+        var traversalException = await Assert.ThrowsAsync<TerminalProcessBoundaryViolationException>(() => adapter.RunAsync(
+            new TerminalProcessLaunchRequest("dotnet", ["--version"], traversal, WorkerResourceQuota.Default),
+            _ => throw new Xunit.Sdk.XunitException("process must not start"),
+            TestContext.Current.CancellationToken));
+
+        var environmentException = await Assert.ThrowsAsync<TerminalProcessBoundaryViolationException>(() => adapter.RunAsync(
+            new TerminalProcessLaunchRequest("dotnet", ["--version"], Directory.GetCurrentDirectory(), WorkerResourceQuota.Default, environment),
+            _ => throw new Xunit.Sdk.XunitException("process must not start"),
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal("terminal_working_directory_traversal_denied", traversalException.ReasonCode);
+        Assert.Equal("terminal_environment_not_allowed", environmentException.ReasonCode);
+        Assert.DoesNotContain("must_not_cross_boundary", environmentException.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunnerRefusesAnAdapterThatCannotEnforceNetworkPolicy()
+    {
+        var workflow = ActiveWorkflow("dotnet_build", ["build"]);
+        var worker = RunningWorker();
+        var runner = new UnisolatedRunner();
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, workflow.ExpectedSha256Hash, worker, runner, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Failed, outcome.Status);
+        Assert.Equal("terminal_network_isolation_unavailable", outcome.FailureReason);
+        Assert.False(runner.WasCalled);
     }
 
     [Fact]
@@ -176,6 +211,8 @@ public sealed class StructuredTerminalWorkerRunnerTests
 
         public TerminalProcessLaunchRequest? Request { get; private set; }
 
+        public bool ProvidesNetworkIsolation => true;
+
         public bool ReceivedCancellation { get; private set; }
 
         public Task<TerminalProcessRunResult> RunAsync(
@@ -194,6 +231,22 @@ public sealed class StructuredTerminalWorkerRunnerTests
             return _exception is not null
                 ? Task.FromException<TerminalProcessRunResult>(_exception)
                 : Task.FromResult(_result!);
+        }
+    }
+
+    private sealed class UnisolatedRunner : ITerminalProcessRunner
+    {
+        public bool ProvidesNetworkIsolation => false;
+
+        public bool WasCalled { get; private set; }
+
+        public Task<TerminalProcessRunResult> RunAsync(
+            TerminalProcessLaunchRequest request,
+            Action<int> onProcessStarted,
+            CancellationToken cancellationToken)
+        {
+            WasCalled = true;
+            throw new Xunit.Sdk.XunitException("unisolated process runner must not execute");
         }
     }
 }
