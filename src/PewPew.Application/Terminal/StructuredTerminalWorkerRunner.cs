@@ -40,6 +40,11 @@ public static class StructuredTerminalWorkerRunner
             providedSha256Hash,
             DateTimeOffset.UtcNow);
 
+        if (!processRunner.ProvidesNetworkIsolation)
+        {
+            return WorkerExecutionOutcome.Failed("terminal_network_isolation_unavailable");
+        }
+
         using var timeout = new CancellationTokenSource(remaining);
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -78,6 +83,10 @@ public static class StructuredTerminalWorkerRunner
         catch (OperationCanceledException)
         {
             return WorkerExecutionOutcome.Cancelled("terminal_execution_cancelled");
+        }
+        catch (TerminalProcessBoundaryViolationException exception)
+        {
+            return WorkerExecutionOutcome.Failed(exception.ReasonCode);
         }
         catch (Exception)
         {

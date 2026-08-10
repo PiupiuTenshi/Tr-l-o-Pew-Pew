@@ -11,6 +11,8 @@ namespace PewPew.Infrastructure.Terminal;
 /// </summary>
 public sealed class LocalTerminalProcessRunner : ITerminalProcessRunner
 {
+    public bool ProvidesNetworkIsolation => IsNetworkIsolationAvailable();
+
     public async Task<TerminalProcessRunResult> RunAsync(
         TerminalProcessLaunchRequest request,
         Action<int> onProcessStarted,
@@ -19,6 +21,15 @@ public sealed class LocalTerminalProcessRunner : ITerminalProcessRunner
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(onProcessStarted);
         cancellationToken.ThrowIfCancellationRequested();
+
+        ValidateBoundary(request);
+
+        // Windows Process alone cannot enforce a per-process network deny. Do
+        // not run a workflow merely because its quota says AllowNetworkAccess=false.
+        if (!ProvidesNetworkIsolation)
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_network_isolation_unavailable");
+        }
 
         var startInfo = new ProcessStartInfo
         {
@@ -29,6 +40,10 @@ public sealed class LocalTerminalProcessRunner : ITerminalProcessRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+
+        // Do not inherit desktop/session variables (including credentials). A
+        // future isolated adapter must supply a separately reviewed allowlist.
+        startInfo.Environment.Clear();
 
         foreach (var argument in request.Arguments)
         {
@@ -71,6 +86,46 @@ public sealed class LocalTerminalProcessRunner : ITerminalProcessRunner
             peakRamMb,
             duration);
     }
+
+    private static void ValidateBoundary(TerminalProcessLaunchRequest request)
+    {
+        if (request.Quota.AllowNetworkAccess)
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_network_access_not_allowed");
+        }
+
+        if (request.Environment is { Count: > 0 })
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_environment_not_allowed");
+        }
+
+        if (!Path.IsPathFullyQualified(request.WorkingDirectory))
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_working_directory_not_absolute");
+        }
+
+        if (request.WorkingDirectory
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries)
+            .Any(segment => segment is "." or ".."))
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_working_directory_traversal_denied");
+        }
+
+        if (!Directory.Exists(request.WorkingDirectory))
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_working_directory_not_found");
+        }
+
+        if ((File.GetAttributes(request.WorkingDirectory) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new TerminalProcessBoundaryViolationException("terminal_working_directory_reparse_point_denied");
+        }
+    }
+
+    // A ProcessStartInfo process has no per-process network deny primitive. A
+    // future Windows sandbox/AppContainer adapter may replace this probe only
+    // after supplying enforceable isolation and its own integration evidence.
+    private static bool IsNetworkIsolationAvailable() => false;
 
     private static async Task CountOutputAsync(StreamReader reader, OutputCounter counter)
     {
