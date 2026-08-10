@@ -58,7 +58,7 @@ public sealed class ExtensionOriginPolicyValidator
             return false;
         }
 
-        if (manifest.HostPermissions.Any(p => p == "<all_urls>" || p == "*://*/*" || p.Contains('*')))
+        if (manifest.HostPermissions.Any(IsWildcardHostPermission))
         {
             failureReason = "manifest_wildcard_host_permission_prohibited: Wildcard '<all_urls>' host permission is denied by security policy";
             return false;
@@ -66,6 +66,25 @@ public sealed class ExtensionOriginPolicyValidator
 
         failureReason = null;
         return true;
+    }
+
+    private static bool IsWildcardHostPermission(string permission)
+    {
+        if (string.IsNullOrWhiteSpace(permission) || permission == "<all_urls>" || permission.StartsWith("*://", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var schemeSeparator = permission.IndexOf("://", StringComparison.Ordinal);
+        if (schemeSeparator <= 0)
+        {
+            return true;
+        }
+
+        var authorityStart = schemeSeparator + 3;
+        var pathStart = permission.IndexOf('/', authorityStart);
+        var authority = pathStart >= 0 ? permission[authorityStart..pathStart] : permission[authorityStart..];
+        return string.IsNullOrWhiteSpace(authority) || authority.Contains('*') || authority.Contains('?');
     }
 
     /// <summary>

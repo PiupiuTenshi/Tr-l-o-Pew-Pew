@@ -23,6 +23,13 @@ let pendingConnection = null;
 
 const ALLOWED_ACTIONS = new Set(['play', 'pause', 'mute', 'unmute']);
 
+function parseBoundTabId(command) {
+  const tabId = Number.parseInt(command?.tabId, 10);
+  return Number.isInteger(tabId) && tabId >= 0 && String(tabId) === String(command?.tabId)
+    ? tabId
+    : null;
+}
+
 function metadataOnlyReadback(action, result) {
   return {
     version: 1,
@@ -47,8 +54,10 @@ async function executeTypedMediaCommand(command) {
     return;
   }
 
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab || String(tab.id) !== command.tabId || !isOriginAllowed(tab.url)) {
+  // Confirmation moves focus to Desktop. Execute only the tab that the authenticated
+  // poll already bound, and verify its origin inside the injected readback.
+  const tabId = parseBoundTabId(command);
+  if (tabId === null || !isOriginAllowed(command.targetOrigin)) {
     nativePort?.postMessage(metadataOnlyReadback(command.actionKind, {
       origin: command.targetOrigin, tabId: command.tabId, snapshotId: command.snapshotId,
       snapshotVersion: command.snapshotVersion, navigationGeneration: command.navigationGeneration,
@@ -57,20 +66,11 @@ async function executeTypedMediaCommand(command) {
     return;
   }
 
-  const currentOrigin = new URL(tab.url).origin;
-  if (currentOrigin !== command.targetOrigin) {
-    nativePort?.postMessage(metadataOnlyReadback(command.actionKind, {
-      origin: command.targetOrigin, tabId: command.tabId, snapshotId: command.snapshotId,
-      snapshotVersion: command.snapshotVersion, navigationGeneration: command.navigationGeneration,
-      commandId: command.commandId, payloadHash: command.payloadHash, status: 'origin_mismatch'
-    }));
-    return;
-  }
-
   try {
     const [injection] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (action) => {
+      target: { tabId },
+      func: async (action, expectedOrigin) => {
+        if (location.origin !== expectedOrigin) return { status: 'origin_mismatch' };
         const videos = Array.from(document.querySelectorAll('video')).filter((video) => {
           const box = video.getBoundingClientRect();
           const style = getComputedStyle(video);
@@ -78,7 +78,13 @@ async function executeTypedMediaCommand(command) {
         });
         if (videos.length !== 1) return { status: 'target_ambiguous' };
         const video = videos[0];
-        if (action === 'play') void video.play();
+        if (action === 'play') {
+          try {
+            await video.play();
+          } catch (_) {
+            return { status: 'playback_denied' };
+          }
+        }
         if (action === 'pause') video.pause();
         if (action === 'mute') video.muted = true;
         if (action === 'unmute') video.muted = false;
@@ -89,7 +95,7 @@ async function executeTypedMediaCommand(command) {
           : (video.muted ? 'observed_muted' : 'observed_unmuted');
         return { status };
       },
-      args: [command.actionKind]
+      args: [command.actionKind, command.targetOrigin]
     });
     nativePort?.postMessage(metadataOnlyReadback(command.actionKind, {
       origin: command.targetOrigin, tabId: command.tabId, snapshotId: command.snapshotId,
