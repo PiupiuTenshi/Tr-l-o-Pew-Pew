@@ -90,6 +90,15 @@ public sealed class ChromiumExtensionBaselineTests
     }
 
     [Fact]
+    public void ValidateManifestAcceptsNarrowYouTubeHostPermission()
+    {
+        var manifest = new ChromiumExtensionManifest(3, "Pew Pew", "1.0.0", "Bound media", ["activeTab", "nativeMessaging", "scripting"], ["https://www.youtube.com/*"]);
+
+        Assert.True(ExtensionOriginPolicyValidator.ValidateManifest(manifest, out var failureReason));
+        Assert.Null(failureReason);
+    }
+
+    [Fact]
     public void IsOriginAllowedDeniesHttpsWithoutExplicitAllowlist()
     {
         var validator = new ExtensionOriginPolicyValidator();
@@ -165,7 +174,16 @@ public sealed class ChromiumExtensionBaselineTests
         Assert.DoesNotContain("<all_urls>", permissions);
         Assert.DoesNotContain("<all_urls>", hostPermissions);
         Assert.Contains("nativeMessaging", permissions);
-        Assert.Empty(hostPermissions);
+        Assert.Equal(["https://www.youtube.com/*"], hostPermissions);
+
+        var background = File.ReadAllText(Path.Combine(solutionDir, "src", "extension", "background.js"));
+        var start = background.IndexOf("async function executeTypedMediaCommand", StringComparison.Ordinal);
+        var end = background.IndexOf("function startCommandPolling", start, StringComparison.Ordinal);
+        var dispatch = background[start..end];
+        Assert.Contains("target: { tabId }", dispatch, StringComparison.Ordinal);
+        Assert.Contains("location.origin !== expectedOrigin", dispatch, StringComparison.Ordinal);
+        Assert.Contains("await video.play();", dispatch, StringComparison.Ordinal);
+        Assert.DoesNotContain("chrome.tabs.query", dispatch, StringComparison.Ordinal);
     }
 
     private static string FindSolutionDirectory()
