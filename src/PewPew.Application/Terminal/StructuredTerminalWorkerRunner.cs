@@ -40,7 +40,9 @@ public static class StructuredTerminalWorkerRunner
             providedSha256Hash,
             DateTimeOffset.UtcNow);
 
-        if (!processRunner.ProvidesNetworkIsolation)
+        if (processRunner is not IIsolatedTerminalWorkerHost isolatedHost ||
+            !isolatedHost.ProvidesNetworkIsolation ||
+            !HasRequiredIsolationControls(isolatedHost.GetReadiness()))
         {
             return WorkerExecutionOutcome.Failed("terminal_network_isolation_unavailable");
         }
@@ -96,4 +98,10 @@ public static class StructuredTerminalWorkerRunner
                     : "terminal_process_start_failed");
         }
     }
+
+    private static bool HasRequiredIsolationControls(IsolatedTerminalWorkerReadiness readiness) =>
+        readiness.IsReady &&
+        readiness.HasNetworkDeniedAppContainer &&
+        readiness.HasRestrictedJobObject &&
+        readiness.HasAuthenticatedLocalIpc;
 }
