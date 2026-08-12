@@ -8,6 +8,39 @@ namespace PewPew.Architecture.Tests;
 public sealed class WindowsAppContainerTerminalWorkerHostTests
 {
     [Fact]
+    public void DefaultWorkerDirectoryIsUnderLocalAppData()
+    {
+        var localAppData = Path.GetFullPath(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+        var workerDirectory = WindowsAppContainerTerminalWorkerProvisioner.DefaultWorkerDirectory;
+
+        Assert.StartsWith(localAppData, workerDirectory, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(Path.Combine("PewPew", "TerminalWorker"), workerDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProvisioningManualEvidenceCreatesOnlyTheApprovedProfileAndDirectory()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("PEWPEW_RUN_APPCONTAINER_PROVISIONING_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var provisioner = new WindowsAppContainerTerminalWorkerProvisioner();
+        var result = provisioner.Provision();
+
+        Assert.Equal(WindowsAppContainerTerminalWorkerProvisioner.ProfileName, result.ProfileName);
+        Assert.Equal(WindowsAppContainerTerminalWorkerProvisioner.DefaultWorkerDirectory, result.WorkerDirectory);
+        Assert.True(Directory.Exists(result.WorkerDirectory));
+        Assert.True(result.Readiness.HasNetworkDeniedAppContainer);
+        Assert.False(result.Readiness.IsReady);
+        Assert.Equal("isolated_terminal_worker_broker_unavailable", result.Readiness.ReasonCode);
+    }
+
+    [Fact]
     public async Task UnprovisionedHostFailsClosedBeforeAnyProcessCanStart()
     {
         var host = new WindowsAppContainerTerminalWorkerHost(new Provisioner(
