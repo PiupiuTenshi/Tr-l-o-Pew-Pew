@@ -41,6 +41,21 @@ public sealed class WindowsAppContainerTerminalWorkerHostTests
     }
 
     [Fact]
+    public void RestrictedJobManualEvidenceIsOptInAndClosesDeterministically()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("PEWPEW_RUN_RESTRICTED_JOB_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        using var job = WindowsRestrictedJobObject.Create();
+        Assert.True(job.IsActive);
+    }
+
+    [Fact]
     public async Task UnprovisionedHostFailsClosedBeforeAnyProcessCanStart()
     {
         var host = new WindowsAppContainerTerminalWorkerHost(new Provisioner(

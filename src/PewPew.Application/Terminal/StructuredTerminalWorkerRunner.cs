@@ -54,12 +54,18 @@ public static class StructuredTerminalWorkerRunner
 
         try
         {
+            var binding = IsolatedTerminalWorkerBinding.Create(
+                worker.Id.ToString(),
+                workflow.Id.ToString(),
+                workflow.Version,
+                workflow.ExpectedSha256Hash);
             var result = await processRunner.RunAsync(
                 new TerminalProcessLaunchRequest(
                     prepared.ExecutablePath,
                     prepared.BoundArguments,
                     prepared.WorkingDirectoryRoot,
-                    worker.Quota),
+                    worker.Quota,
+                    Binding: binding),
                 worker.AttachRootProcessId,
                 linkedCancellation.Token).ConfigureAwait(false);
 

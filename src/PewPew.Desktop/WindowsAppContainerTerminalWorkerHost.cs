@@ -11,15 +11,30 @@ namespace PewPew.Desktop;
 public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWorkerHost
 {
     private readonly IWindowsAppContainerTerminalWorkerProvisioner _provisioner;
+    private readonly IIsolatedTerminalWorkerBroker _broker;
 
-    public WindowsAppContainerTerminalWorkerHost(IWindowsAppContainerTerminalWorkerProvisioner provisioner)
+    public WindowsAppContainerTerminalWorkerHost(
+        IWindowsAppContainerTerminalWorkerProvisioner provisioner,
+        IIsolatedTerminalWorkerBroker? broker = null)
     {
         _provisioner = provisioner ?? throw new ArgumentNullException(nameof(provisioner));
+        _broker = broker ?? new UnavailableIsolatedTerminalWorkerBroker();
     }
 
     public bool ProvidesNetworkIsolation => IsEnforced(GetReadiness());
 
-    public IsolatedTerminalWorkerReadiness GetReadiness() => _provisioner.GetReadiness();
+    public IsolatedTerminalWorkerReadiness GetReadiness()
+    {
+        var provisioning = _provisioner.GetReadiness();
+        var authenticatedIpc = provisioning.HasAuthenticatedLocalIpc && _broker.IsAuthenticated;
+        return provisioning with
+        {
+            IsReady = provisioning.HasNetworkDeniedAppContainer &&
+                      provisioning.HasRestrictedJobObject &&
+                      authenticatedIpc,
+            HasAuthenticatedLocalIpc = authenticatedIpc
+        };
+    }
 
     public Task<TerminalProcessRunResult> RunAsync(
         TerminalProcessLaunchRequest request,
@@ -35,10 +50,12 @@ public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWor
             throw new TerminalProcessBoundaryViolationException("isolated_terminal_worker_unavailable");
         }
 
-        // The provisioned broker is introduced only after profile/ACL setup has
-        // explicit user confirmation and an integration task. No ProcessStartInfo
-        // fallback is permitted at this boundary.
-        throw new TerminalProcessBoundaryViolationException("isolated_terminal_worker_broker_unavailable");
+        if (request.Binding is null)
+        {
+            throw new TerminalProcessBoundaryViolationException("isolated_terminal_worker_binding_invalid");
+        }
+
+        return _broker.ExecuteAsync(new IsolatedTerminalWorkerInvocation(request.Binding, request), onProcessStarted, cancellationToken);
     }
 
     private static bool IsEnforced(IsolatedTerminalWorkerReadiness readiness) =>
@@ -46,6 +63,17 @@ public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWor
         readiness.HasNetworkDeniedAppContainer &&
         readiness.HasRestrictedJobObject &&
         readiness.HasAuthenticatedLocalIpc;
+}
+
+internal sealed class UnavailableIsolatedTerminalWorkerBroker : IIsolatedTerminalWorkerBroker
+{
+    public bool IsAuthenticated => false;
+
+    public Task<TerminalProcessRunResult> ExecuteAsync(
+        IsolatedTerminalWorkerInvocation invocation,
+        Action<int> onProcessStarted,
+        CancellationToken cancellationToken) =>
+        throw new TerminalProcessBoundaryViolationException("isolated_terminal_worker_broker_unavailable");
 }
 
 /// <summary>
