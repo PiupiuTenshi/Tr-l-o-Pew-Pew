@@ -1,3 +1,5 @@
+using PewPew.Domain.Workers;
+
 namespace PewPew.Application.Terminal;
 
 /// <summary>
@@ -56,6 +58,57 @@ public sealed record IsolatedTerminalWorkerInvocation(
     TerminalProcessLaunchRequest LaunchRequest);
 
 /// <summary>
+/// Serialization-only wire shape for the local worker. It deliberately avoids
+/// interface-typed collections and domain value objects at the process
+/// boundary; the worker recreates the validated request before execution.
+/// </summary>
+public sealed record IsolatedTerminalWorkerWireInvocation(
+    IsolatedTerminalWorkerBinding Binding,
+    string ExecutablePath,
+    IReadOnlyList<string> Arguments,
+    string WorkingDirectory,
+    int MaxRamMb,
+    int MaxCpuPercent,
+    long MaxExecutionDurationMilliseconds,
+    long MaxOutputSizeBytes,
+    bool AllowNetworkAccess,
+    bool AllowFileSystemWrite)
+{
+    public static IsolatedTerminalWorkerWireInvocation From(IsolatedTerminalWorkerInvocation invocation)
+    {
+        ArgumentNullException.ThrowIfNull(invocation);
+        var request = invocation.LaunchRequest;
+        return new(
+            invocation.Binding,
+            request.ExecutablePath,
+            request.Arguments.ToArray(),
+            request.WorkingDirectory,
+            request.Quota.MaxRamMb,
+            request.Quota.MaxCpuPercent,
+            checked((long)request.Quota.MaxExecutionDuration.TotalMilliseconds),
+            request.Quota.MaxOutputSizeBytes,
+            request.Quota.AllowNetworkAccess,
+            request.Quota.AllowFileSystemWrite);
+    }
+
+    public IsolatedTerminalWorkerInvocation ToInvocation() =>
+        new(
+            Binding,
+            new TerminalProcessLaunchRequest(
+                ExecutablePath,
+                Arguments,
+                WorkingDirectory,
+                new WorkerResourceQuota(
+                    MaxRamMb,
+                    MaxCpuPercent,
+                    TimeSpan.FromMilliseconds(MaxExecutionDurationMilliseconds),
+                    MaxOutputSizeBytes,
+                    AllowNetworkAccess,
+                    AllowFileSystemWrite),
+                Binding: Binding));
+}
+
+/// <summary>
 /// Desktop-facing worker broker boundary. Implementations must reject a nonce
 /// replay, correlation mismatch or malformed result before exposing a process
 /// result to Application.
@@ -63,6 +116,8 @@ public sealed record IsolatedTerminalWorkerInvocation(
 public interface IIsolatedTerminalWorkerBroker
 {
     bool IsAuthenticated { get; }
+
+    bool ProvidesRestrictedJobObject { get; }
 
     Task<TerminalProcessRunResult> ExecuteAsync(
         IsolatedTerminalWorkerInvocation invocation,

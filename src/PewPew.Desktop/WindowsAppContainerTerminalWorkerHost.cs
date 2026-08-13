@@ -26,12 +26,14 @@ public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWor
     public IsolatedTerminalWorkerReadiness GetReadiness()
     {
         var provisioning = _provisioner.GetReadiness();
-        var authenticatedIpc = provisioning.HasAuthenticatedLocalIpc && _broker.IsAuthenticated;
+        var authenticatedIpc = _broker.IsAuthenticated;
+        var restrictedJobObject = _broker.ProvidesRestrictedJobObject;
         return provisioning with
         {
             IsReady = provisioning.HasNetworkDeniedAppContainer &&
-                      provisioning.HasRestrictedJobObject &&
+                      restrictedJobObject &&
                       authenticatedIpc,
+            HasRestrictedJobObject = restrictedJobObject,
             HasAuthenticatedLocalIpc = authenticatedIpc
         };
     }
@@ -68,6 +70,8 @@ public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWor
 internal sealed class UnavailableIsolatedTerminalWorkerBroker : IIsolatedTerminalWorkerBroker
 {
     public bool IsAuthenticated => false;
+
+    public bool ProvidesRestrictedJobObject => false;
 
     public Task<TerminalProcessRunResult> ExecuteAsync(
         IsolatedTerminalWorkerInvocation invocation,

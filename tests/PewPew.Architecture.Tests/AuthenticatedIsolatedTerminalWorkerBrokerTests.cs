@@ -78,6 +78,8 @@ public sealed class AuthenticatedIsolatedTerminalWorkerBrokerTests
 
         public bool IsAuthenticated => authenticated;
 
+        public bool ProvidesRestrictedJobObject => authenticated;
+
         public Task<TerminalProcessRunResult> SendAsync(
             IsolatedTerminalWorkerInvocation invocation,
             Action<int> onProcessStarted,

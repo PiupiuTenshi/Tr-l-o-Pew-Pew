@@ -34,7 +34,7 @@ public sealed class WindowsAppContainerTerminalWorkerProvisioner : IWindowsAppCo
             return new(false, "appcontainer_not_supported", false, false, false);
         }
 
-        using var profile = TryDeriveProfileSid();
+        using var profile = TryGetExistingProfileSid();
         if (profile is null)
         {
             return new(false, "appcontainer_profile_missing", false, false, false);
@@ -62,25 +62,25 @@ public sealed class WindowsAppContainerTerminalWorkerProvisioner : IWindowsAppCo
             throw new PlatformNotSupportedException("appcontainer_not_supported");
         }
 
-        var profileCreated = false;
-        NativeAppContainerSidHandle? profile = TryDeriveProfileSid();
+        var result = CreateAppContainerProfile(
+            ProfileName,
+            "PewPew Terminal Worker",
+            "PewPew restricted terminal worker",
+            IntPtr.Zero,
+            0,
+            out var sid);
+        var profileCreated = result == 0;
+        if (result != 0 && unchecked((uint)result) != 0x800700B7)
+        {
+            throw new InvalidOperationException($"appcontainer_profile_create_failed_0x{result:X8}");
+        }
+
+        NativeAppContainerSidHandle? profile = profileCreated
+            ? new NativeAppContainerSidHandle(sid)
+            : TryGetExistingProfileSid();
         if (profile is null)
         {
-            var result = CreateAppContainerProfile(
-                ProfileName,
-                "PewPew Terminal Worker",
-                "PewPew restricted terminal worker",
-                IntPtr.Zero,
-                0,
-                out var sid);
-
-            if (result != 0)
-            {
-                throw new InvalidOperationException($"appcontainer_profile_create_failed_0x{result:X8}");
-            }
-
-            profile = new NativeAppContainerSidHandle(sid);
-            profileCreated = true;
+            throw new InvalidOperationException("appcontainer_profile_create_verification_failed");
         }
 
         using (profile)
@@ -96,10 +96,31 @@ public sealed class WindowsAppContainerTerminalWorkerProvisioner : IWindowsAppCo
             GetReadiness());
     }
 
-    private static NativeAppContainerSidHandle? TryDeriveProfileSid()
+    private static NativeAppContainerSidHandle? TryGetExistingProfileSid()
     {
         var result = DeriveAppContainerSidFromAppContainerName(ProfileName, out var sid);
-        return result == 0 ? new NativeAppContainerSidHandle(sid) : null;
+        if (result != 0 || sid == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            var folderResult = GetAppContainerFolderPath(new SecurityIdentifier(sid).Value, out var folderPath);
+            if (folderResult != 0 || folderPath == IntPtr.Zero)
+            {
+                FreeSid(sid);
+                return null;
+            }
+
+            FreeCoTaskMem(folderPath);
+            return new NativeAppContainerSidHandle(sid);
+        }
+        catch
+        {
+            FreeSid(sid);
+            throw;
+        }
     }
 
     private void GrantWorkerDirectoryAccess(SecurityIdentifier appContainerSid)
@@ -169,6 +190,20 @@ public sealed class WindowsAppContainerTerminalWorkerProvisioner : IWindowsAppCo
 
     [DllImport("advapi32.dll", ExactSpelling = true)]
     private static extern IntPtr FreeSid(IntPtr sid);
+
+    [DllImport("userenv.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetAppContainerFolderPath(string appContainerSid, out IntPtr path);
+
+    [DllImport("ole32.dll", ExactSpelling = true)]
+    private static extern void CoTaskMemFree(IntPtr memory);
+
+    private static void FreeCoTaskMem(IntPtr memory)
+    {
+        if (memory != IntPtr.Zero)
+        {
+            CoTaskMemFree(memory);
+        }
+    }
 }
 
 /// <summary>Metadata-only result of the explicitly confirmed provisioning step.</summary>

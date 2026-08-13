@@ -56,6 +56,68 @@ public sealed class WindowsAppContainerTerminalWorkerHostTests
     }
 
     [Fact]
+    public async Task AppContainerWorkerManualEvidenceRunsOnlyTheHarmlessWorkerFixture()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("PEWPEW_RUN_APPCONTAINER_WORKER_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var workerDirectory = Environment.GetEnvironmentVariable("PEWPEW_APPCONTAINER_WORKER_DIRECTORY");
+        Assert.False(string.IsNullOrWhiteSpace(workerDirectory));
+        workerDirectory = Path.GetFullPath(workerDirectory);
+        var workerExecutable = Path.Combine(workerDirectory, "PewPew.IsolatedTerminalWorker.exe");
+        Assert.True(File.Exists(workerExecutable));
+
+        var binding = IsolatedTerminalWorkerBinding.Create("manual-worker", "manual-fixture", "1.0", "fixture-hash");
+        var invocation = new IsolatedTerminalWorkerInvocation(
+            binding,
+            new TerminalProcessLaunchRequest(workerExecutable, ["--pewpew-isolated-fixture"], workerDirectory, WorkerResourceQuota.Default, Binding: binding));
+        var client = new AppContainerNamedPipeWireClient(workerExecutable);
+        var processId = 0;
+
+        var result = await client.SendAsync(invocation, processIdValue => processId = processIdValue, TestContext.Current.CancellationToken);
+
+        Assert.True(processId > 0);
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(result.OutputLimitExceeded);
+    }
+
+    [Fact]
+    public async Task AppContainerWorkerManualEvidenceRunsOnlyTheAppContainerChildFixture()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("PEWPEW_RUN_APPCONTAINER_WORKER_TEST"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var workerDirectory = Environment.GetEnvironmentVariable("PEWPEW_APPCONTAINER_WORKER_DIRECTORY");
+        Assert.False(string.IsNullOrWhiteSpace(workerDirectory));
+        workerDirectory = Path.GetFullPath(workerDirectory);
+        var workerExecutable = Path.Combine(workerDirectory, "PewPew.IsolatedTerminalWorker.exe");
+        Assert.True(File.Exists(workerExecutable));
+
+        var binding = IsolatedTerminalWorkerBinding.Create("manual-child", "manual-fixture", "1.0", "fixture-hash");
+        var invocation = new IsolatedTerminalWorkerInvocation(
+            binding,
+            new TerminalProcessLaunchRequest(workerExecutable, ["--pewpew-child-fixture"], workerDirectory, WorkerResourceQuota.Default, Binding: binding));
+        var client = new AppContainerNamedPipeWireClient(workerExecutable);
+        var processId = 0;
+
+        var result = await client.SendAsync(invocation, processIdValue => processId = processIdValue, TestContext.Current.CancellationToken);
+
+        Assert.True(processId > 0);
+        Assert.Equal(0, result.ExitCode);
+        Assert.False(result.OutputLimitExceeded);
+    }
+
+    [Fact]
     public async Task UnprovisionedHostFailsClosedBeforeAnyProcessCanStart()
     {
         var host = new WindowsAppContainerTerminalWorkerHost(new Provisioner(

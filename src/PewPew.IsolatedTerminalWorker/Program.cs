@@ -1,25 +1,46 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using PewPew.Application.Terminal;
+
+if (args.Length == 1 && string.Equals(args[0], "--pewpew-child-fixture", StringComparison.Ordinal))
+{
+    return WorkerIsolation.IsCurrentProcessAppContainer() ? 0 : 77;
+}
 
 if (args.Length != 1 || string.IsNullOrWhiteSpace(args[0]))
 {
     return 64;
 }
 
+if (!WorkerIsolation.IsCurrentProcessAppContainer())
+{
+    return 77;
+}
+
+await using var pipe = new NamedPipeClientStream(".", args[0], PipeDirection.InOut, PipeOptions.Asynchronous);
+var stage = "connect";
 try
 {
-    await using var pipe = new NamedPipeClientStream(".", args[0], PipeDirection.InOut, PipeOptions.Asynchronous);
     await pipe.ConnectAsync(TimeSpan.FromSeconds(10), CancellationToken.None).ConfigureAwait(false);
-    var invocation = await IsolatedTerminalWorkerFrameCodec.ReadAsync<IsolatedTerminalWorkerInvocation>(pipe, CancellationToken.None).ConfigureAwait(false);
+    stage = "read";
+    var wireInvocation = await IsolatedTerminalWorkerFrameCodec.ReadAsync<IsolatedTerminalWorkerWireInvocation>(pipe, CancellationToken.None).ConfigureAwait(false);
+    stage = "validate";
+    var invocation = wireInvocation?.ToInvocation();
     if (invocation is null || !IsValid(invocation))
     {
         await IsolatedTerminalWorkerFrameCodec.WriteAsync(pipe, IsolatedTerminalWorkerResponse.Denied("isolated_terminal_worker_binding_invalid"), CancellationToken.None).ConfigureAwait(false);
         return 65;
     }
 
-    var result = await RunAsync(invocation.LaunchRequest, CancellationToken.None).ConfigureAwait(false);
+    // The manual evidence fixture verifies only the AppContainer launch and
+    // authenticated pipe boundary. It must not start a child process.
+    stage = "execute";
+    var result = IsHarmlessFixture(invocation.LaunchRequest)
+        ? new TerminalProcessRunResult(0, 0, false, 1, TimeSpan.Zero)
+        : await RunAsync(invocation.LaunchRequest, CancellationToken.None).ConfigureAwait(false);
+    stage = "write";
     await IsolatedTerminalWorkerFrameCodec.WriteAsync(pipe, IsolatedTerminalWorkerResponse.Completed(result), CancellationToken.None).ConfigureAwait(false);
     return 0;
 }
@@ -29,6 +50,20 @@ catch (OperationCanceledException)
 }
 catch
 {
+    if (pipe.IsConnected)
+    {
+        try
+        {
+            await IsolatedTerminalWorkerFrameCodec.WriteAsync(
+                pipe,
+                IsolatedTerminalWorkerResponse.Denied($"isolated_terminal_worker_{stage}_failed"),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The desktop side treats an absent response as an uncertain result.
+        }
+    }
     return 1;
 }
 
@@ -39,6 +74,10 @@ static bool IsValid(IsolatedTerminalWorkerInvocation invocation) =>
     !string.IsNullOrWhiteSpace(invocation.Binding.Nonce) &&
     Path.IsPathFullyQualified(invocation.LaunchRequest.ExecutablePath) &&
     Path.IsPathFullyQualified(invocation.LaunchRequest.WorkingDirectory);
+
+static bool IsHarmlessFixture(TerminalProcessLaunchRequest request) =>
+    request.Arguments.Count == 1 &&
+    string.Equals(request.Arguments[0], "--pewpew-isolated-fixture", StringComparison.Ordinal);
 
 static async Task<TerminalProcessRunResult> RunAsync(TerminalProcessLaunchRequest request, CancellationToken cancellationToken)
 {
@@ -150,4 +189,39 @@ internal static class IsolatedTerminalWorkerFrameCodec
         }
         return true;
     }
+}
+
+internal static class WorkerIsolation
+{
+    private const int TokenIsAppContainer = 29;
+
+    public static bool IsCurrentProcessAppContainer()
+    {
+        if (!OpenProcessToken(GetCurrentProcess(), 0x0008, out var token))
+        {
+            return false;
+        }
+
+        try
+        {
+            var value = 0;
+            return GetTokenInformation(token, TokenIsAppContainer, ref value, sizeof(int), out _) && value != 0;
+        }
+        finally
+        {
+            CloseHandle(token);
+        }
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr process, uint desiredAccess, out IntPtr token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(IntPtr token, int tokenInformationClass, ref int tokenInformation, int tokenInformationLength, out int returnLength);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
 }

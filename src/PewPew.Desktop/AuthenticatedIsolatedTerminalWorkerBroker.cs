@@ -20,6 +20,8 @@ public sealed class AuthenticatedIsolatedTerminalWorkerBroker : IIsolatedTermina
 
     public bool IsAuthenticated => _wireClient.IsAuthenticated;
 
+    public bool ProvidesRestrictedJobObject => _wireClient.ProvidesRestrictedJobObject;
+
     public async Task<TerminalProcessRunResult> ExecuteAsync(
         IsolatedTerminalWorkerInvocation invocation,
         Action<int> onProcessStarted,
@@ -78,6 +80,8 @@ public sealed class AuthenticatedIsolatedTerminalWorkerBroker : IIsolatedTermina
 public interface IIsolatedTerminalWorkerWireClient
 {
     bool IsAuthenticated { get; }
+
+    bool ProvidesRestrictedJobObject { get; }
 
     Task<TerminalProcessRunResult> SendAsync(
         IsolatedTerminalWorkerInvocation invocation,
