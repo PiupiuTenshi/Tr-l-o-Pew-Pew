@@ -47,6 +47,7 @@ public sealed class TerminalWorkflowDefinition
     public string ExecutablePath { get; }
     public string WorkingDirectoryRoot { get; }
     public string ExpectedSha256Hash { get; }
+    public string? ExpectedExecutableSha256Hash { get; }
     public TerminalWorkflowStatus Status { get; private set; }
     public TerminalWorkflowRiskLevel RiskLevel { get; }
     public string? RejectionReason { get; private set; }
@@ -66,6 +67,7 @@ public sealed class TerminalWorkflowDefinition
         IEnumerable<string> allowedPlaceholders,
         TerminalWorkflowRiskLevel riskLevel,
         string expectedSha256Hash,
+        string? expectedExecutableSha256Hash = null,
         DateTimeOffset? createdAtUtc = null)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -109,6 +111,11 @@ public sealed class TerminalWorkflowDefinition
             throw new ArgumentException("Expected SHA-256 hash must be a 64-character hex string.", nameof(expectedSha256Hash));
         }
 
+        if (!string.IsNullOrWhiteSpace(expectedExecutableSha256Hash) && !Sha256HexRegex.IsMatch(expectedExecutableSha256Hash))
+        {
+            throw new ArgumentException("Executable SHA-256 hash must be a 64-character hex string.", nameof(expectedExecutableSha256Hash));
+        }
+
         ArgumentNullException.ThrowIfNull(fixedArguments);
         ArgumentNullException.ThrowIfNull(allowedPlaceholders);
 
@@ -139,6 +146,7 @@ public sealed class TerminalWorkflowDefinition
         _allowedPlaceholders = placeholderList!;
         RiskLevel = riskLevel;
         ExpectedSha256Hash = expectedSha256Hash.ToLowerInvariant();
+        ExpectedExecutableSha256Hash = expectedExecutableSha256Hash?.Trim().ToLowerInvariant();
         Status = TerminalWorkflowStatus.Draft;
 
         var now = createdAtUtc ?? DateTimeOffset.UtcNow;

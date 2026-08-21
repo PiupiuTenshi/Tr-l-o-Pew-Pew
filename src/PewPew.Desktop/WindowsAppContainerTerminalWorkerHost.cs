@@ -5,20 +5,20 @@ namespace PewPew.Desktop;
 /// <summary>
 /// Windows composition-bound adapter for DEC-014. It deliberately refuses all
 /// execution until a separately confirmed provisioner proves the AppContainer,
-/// Job Object and authenticated IPC are available. It never falls back to the
+/// Job Object and Desktop-owned authenticated control boundary are available. It never falls back to the
 /// unsandboxed local process runner.
 /// </summary>
 public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWorkerHost
 {
     private readonly IWindowsAppContainerTerminalWorkerProvisioner _provisioner;
-    private readonly IIsolatedTerminalWorkerBroker _broker;
+    private readonly IAppContainerTerminalWorkloadLauncher _launcher;
 
     public WindowsAppContainerTerminalWorkerHost(
         IWindowsAppContainerTerminalWorkerProvisioner provisioner,
-        IIsolatedTerminalWorkerBroker? broker = null)
+        IAppContainerTerminalWorkloadLauncher? launcher = null)
     {
         _provisioner = provisioner ?? throw new ArgumentNullException(nameof(provisioner));
-        _broker = broker ?? new UnavailableIsolatedTerminalWorkerBroker();
+        _launcher = launcher ?? new UnavailableAppContainerTerminalWorkloadLauncher();
     }
 
     public bool ProvidesNetworkIsolation => IsEnforced(GetReadiness());
@@ -26,15 +26,15 @@ public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWor
     public IsolatedTerminalWorkerReadiness GetReadiness()
     {
         var provisioning = _provisioner.GetReadiness();
-        var authenticatedIpc = _broker.IsAuthenticated;
-        var restrictedJobObject = _broker.ProvidesRestrictedJobObject;
+        var authenticatedControl = _launcher.HasAuthenticatedLocalControl;
+        var restrictedJobObject = _launcher.ProvidesRestrictedJobObject;
         return provisioning with
         {
             IsReady = provisioning.HasNetworkDeniedAppContainer &&
                       restrictedJobObject &&
-                      authenticatedIpc,
+                      authenticatedControl,
             HasRestrictedJobObject = restrictedJobObject,
-            HasAuthenticatedLocalIpc = authenticatedIpc
+            HasAuthenticatedLocalControl = authenticatedControl
         };
     }
 
@@ -57,27 +57,27 @@ public sealed class WindowsAppContainerTerminalWorkerHost : IIsolatedTerminalWor
             throw new TerminalProcessBoundaryViolationException("isolated_terminal_worker_binding_invalid");
         }
 
-        return _broker.ExecuteAsync(new IsolatedTerminalWorkerInvocation(request.Binding, request), onProcessStarted, cancellationToken);
+        return _launcher.LaunchAsync(request, onProcessStarted, cancellationToken);
     }
 
     private static bool IsEnforced(IsolatedTerminalWorkerReadiness readiness) =>
         readiness.IsReady &&
         readiness.HasNetworkDeniedAppContainer &&
         readiness.HasRestrictedJobObject &&
-        readiness.HasAuthenticatedLocalIpc;
+        readiness.HasAuthenticatedLocalControl;
 }
 
-internal sealed class UnavailableIsolatedTerminalWorkerBroker : IIsolatedTerminalWorkerBroker
+internal sealed class UnavailableAppContainerTerminalWorkloadLauncher : IAppContainerTerminalWorkloadLauncher
 {
-    public bool IsAuthenticated => false;
+    public bool HasAuthenticatedLocalControl => false;
 
     public bool ProvidesRestrictedJobObject => false;
 
-    public Task<TerminalProcessRunResult> ExecuteAsync(
-        IsolatedTerminalWorkerInvocation invocation,
+    public Task<TerminalProcessRunResult> LaunchAsync(
+        TerminalProcessLaunchRequest request,
         Action<int> onProcessStarted,
         CancellationToken cancellationToken) =>
-        throw new TerminalProcessBoundaryViolationException("isolated_terminal_worker_broker_unavailable");
+        throw new TerminalProcessBoundaryViolationException("isolated_terminal_workload_launcher_unavailable");
 }
 
 /// <summary>

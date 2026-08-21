@@ -18,7 +18,7 @@ public sealed record IsolatedTerminalWorkerReadiness(
     string ReasonCode,
     bool HasNetworkDeniedAppContainer,
     bool HasRestrictedJobObject,
-    bool HasAuthenticatedLocalIpc);
+    bool HasAuthenticatedLocalControl);
 
 /// <summary>
 /// One-time binding for an isolated-worker request. The caller must pass this
@@ -121,6 +121,23 @@ public interface IIsolatedTerminalWorkerBroker
 
     Task<TerminalProcessRunResult> ExecuteAsync(
         IsolatedTerminalWorkerInvocation invocation,
+        Action<int> onProcessStarted,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Desktop-owned direct AppContainer workload boundary. There is deliberately
+/// no workload IPC endpoint: the Desktop process owns the authenticated launch
+/// handle and the restricted Job Object for its complete lifetime.
+/// </summary>
+public interface IAppContainerTerminalWorkloadLauncher
+{
+    bool HasAuthenticatedLocalControl { get; }
+
+    bool ProvidesRestrictedJobObject { get; }
+
+    Task<TerminalProcessRunResult> LaunchAsync(
+        TerminalProcessLaunchRequest request,
         Action<int> onProcessStarted,
         CancellationToken cancellationToken);
 }

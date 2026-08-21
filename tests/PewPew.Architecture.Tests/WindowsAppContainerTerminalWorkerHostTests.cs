@@ -37,7 +37,7 @@ public sealed class WindowsAppContainerTerminalWorkerHostTests
         Assert.True(Directory.Exists(result.WorkerDirectory));
         Assert.True(result.Readiness.HasNetworkDeniedAppContainer);
         Assert.False(result.Readiness.IsReady);
-        Assert.Equal("isolated_terminal_worker_broker_unavailable", result.Readiness.ReasonCode);
+        Assert.Equal("isolated_terminal_workload_launcher_unavailable", result.Readiness.ReasonCode);
     }
 
     [Fact]

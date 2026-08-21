@@ -22,6 +22,7 @@ public sealed class TerminalWorkflowService
         IEnumerable<string> allowedPlaceholders,
         TerminalWorkflowRiskLevel riskLevel,
         string? expectedHash = null,
+        string? expectedExecutableSha256Hash = null,
         DateTimeOffset? nowUtc = null)
     {
         var fixedList = fixedArguments?.ToList() ?? new List<string>();
@@ -47,6 +48,7 @@ public sealed class TerminalWorkflowService
             placeholderList,
             riskLevel,
             computedHash,
+            expectedExecutableSha256Hash,
             nowUtc);
     }
 
@@ -54,7 +56,7 @@ public sealed class TerminalWorkflowService
     /// Validates, checks hash verification, and prepares a workflow for execution.
     /// Returns the verified executable path and bound argument list.
     /// </summary>
-    public static (string ExecutablePath, string WorkingDirectoryRoot, IReadOnlyList<string> BoundArguments) PrepareExecution(
+    public static PreparedTerminalWorkflowExecution PrepareExecution(
         TerminalWorkflowDefinition workflow,
         IDictionary<string, string>? parameterValues,
         string providedSha256Hash,
@@ -75,6 +77,16 @@ public sealed class TerminalWorkflowService
 
         var boundArguments = TerminalWorkflowValidator.SanitizeAndBindArguments(workflow, parameterValues);
 
-        return (workflow.ExecutablePath, workflow.WorkingDirectoryRoot, boundArguments);
+        return new PreparedTerminalWorkflowExecution(
+            workflow.ExecutablePath,
+            workflow.WorkingDirectoryRoot,
+            boundArguments,
+            workflow.ExpectedExecutableSha256Hash);
     }
 }
+
+public sealed record PreparedTerminalWorkflowExecution(
+    string ExecutablePath,
+    string WorkingDirectoryRoot,
+    IReadOnlyList<string> BoundArguments,
+    string? ExpectedExecutableSha256Hash);

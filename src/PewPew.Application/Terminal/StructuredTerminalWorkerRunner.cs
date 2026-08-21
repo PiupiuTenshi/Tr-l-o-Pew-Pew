@@ -65,7 +65,8 @@ public static class StructuredTerminalWorkerRunner
                     prepared.BoundArguments,
                     prepared.WorkingDirectoryRoot,
                     worker.Quota,
-                    Binding: binding),
+                    Binding: binding,
+                    ExpectedExecutableSha256Hash: prepared.ExpectedExecutableSha256Hash),
                 worker.AttachRootProcessId,
                 linkedCancellation.Token).ConfigureAwait(false);
 
@@ -109,5 +110,5 @@ public static class StructuredTerminalWorkerRunner
         readiness.IsReady &&
         readiness.HasNetworkDeniedAppContainer &&
         readiness.HasRestrictedJobObject &&
-        readiness.HasAuthenticatedLocalIpc;
+        readiness.HasAuthenticatedLocalControl;
 }

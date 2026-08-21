@@ -42,6 +42,22 @@ public sealed class TerminalWorkflowDefinitionTests
     }
 
     [Fact]
+    public void CreateDraftRejectsMalformedPinnedExecutableHash()
+    {
+        var exception = Assert.Throws<ArgumentException>(() => TerminalWorkflowService.CreateDraft(
+            "dotnet_build",
+            "1.0.0",
+            ValidExe,
+            ValidWorkDir,
+            SampleBuildArgs,
+            SampleProjectPlaceholders,
+            TerminalWorkflowRiskLevel.Medium,
+            expectedExecutableSha256Hash: "not-a-sha256"));
+
+        Assert.Contains("Executable SHA-256 hash", exception.Message);
+    }
+
+    [Fact]
     public void LifecycleTransitionsSubmitApproveActivateSucceed()
     {
         var now = DateTimeOffset.UtcNow;
