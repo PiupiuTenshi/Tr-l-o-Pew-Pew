@@ -40,7 +40,9 @@ public static class StructuredTerminalWorkerRunner
             providedSha256Hash,
             DateTimeOffset.UtcNow);
 
-        if (!processRunner.ProvidesNetworkIsolation)
+        if (processRunner is not IIsolatedTerminalWorkerHost isolatedHost ||
+            !isolatedHost.ProvidesNetworkIsolation ||
+            !HasRequiredIsolationControls(isolatedHost.GetReadiness()))
         {
             return WorkerExecutionOutcome.Failed("terminal_network_isolation_unavailable");
         }
@@ -52,12 +54,18 @@ public static class StructuredTerminalWorkerRunner
 
         try
         {
+            var binding = IsolatedTerminalWorkerBinding.Create(
+                worker.Id.ToString(),
+                workflow.Id.ToString(),
+                workflow.Version,
+                workflow.ExpectedSha256Hash);
             var result = await processRunner.RunAsync(
                 new TerminalProcessLaunchRequest(
                     prepared.ExecutablePath,
                     prepared.BoundArguments,
                     prepared.WorkingDirectoryRoot,
-                    worker.Quota),
+                    worker.Quota,
+                    Binding: binding),
                 worker.AttachRootProcessId,
                 linkedCancellation.Token).ConfigureAwait(false);
 
@@ -96,4 +104,10 @@ public static class StructuredTerminalWorkerRunner
                     : "terminal_process_start_failed");
         }
     }
+
+    private static bool HasRequiredIsolationControls(IsolatedTerminalWorkerReadiness readiness) =>
+        readiness.IsReady &&
+        readiness.HasNetworkDeniedAppContainer &&
+        readiness.HasRestrictedJobObject &&
+        readiness.HasAuthenticatedLocalIpc;
 }

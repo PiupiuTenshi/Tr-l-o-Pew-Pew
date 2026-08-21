@@ -18,6 +18,7 @@
     <ProjectReference Include="../PewPew.SharedKernel/PewPew.SharedKernel.csproj" />
     <ProjectReference Include="..\PewPew.Application\PewPew.Application.csproj" />
     <ProjectReference Include="..\PewPew.Infrastructure\PewPew.Infrastructure.csproj" />
+    <ProjectReference Include="..\PewPew.IsolatedTerminalWorker\PewPew.IsolatedTerminalWorker.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.desktop.local.json" CopyToOutputDirectory="PreserveNewest" />

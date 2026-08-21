@@ -67,6 +67,21 @@ public sealed class StructuredTerminalWorkerRunnerTests
     }
 
     [Fact]
+    public async Task RunnerRejectsAnIsolatedHostWithoutEveryRequiredControl()
+    {
+        var workflow = ActiveWorkflow("dotnet_build", ["build"]);
+        var worker = RunningWorker();
+        var runner = new IncompleteIsolatedHost();
+
+        var outcome = await StructuredTerminalWorkerRunner.ExecuteAsync(
+            workflow, null, workflow.ExpectedSha256Hash, worker, runner, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WorkerExecutionStatus.Failed, outcome.Status);
+        Assert.Equal("terminal_network_isolation_unavailable", outcome.FailureReason);
+        Assert.False(runner.WasCalled);
+    }
+
+    [Fact]
     public async Task BuildWorkflowBindsRealPidAndReturnsMetadataOnlySuccessEvidence()
     {
         var workflow = ActiveWorkflow("dotnet_build", ["build"]);
@@ -195,7 +210,7 @@ public sealed class StructuredTerminalWorkerRunnerTests
         return worker;
     }
 
-    private sealed class StubProcessRunner : ITerminalProcessRunner
+    private sealed class StubProcessRunner : IIsolatedTerminalWorkerHost
     {
         private readonly TerminalProcessRunResult? _result;
         private readonly Exception? _exception;
@@ -212,6 +227,9 @@ public sealed class StructuredTerminalWorkerRunnerTests
         public TerminalProcessLaunchRequest? Request { get; private set; }
 
         public bool ProvidesNetworkIsolation => true;
+
+        public IsolatedTerminalWorkerReadiness GetReadiness() =>
+            new(true, "ready", true, true, true);
 
         public bool ReceivedCancellation { get; private set; }
 
@@ -247,6 +265,25 @@ public sealed class StructuredTerminalWorkerRunnerTests
         {
             WasCalled = true;
             throw new Xunit.Sdk.XunitException("unisolated process runner must not execute");
+        }
+    }
+
+    private sealed class IncompleteIsolatedHost : IIsolatedTerminalWorkerHost
+    {
+        public bool ProvidesNetworkIsolation => true;
+
+        public bool WasCalled { get; private set; }
+
+        public IsolatedTerminalWorkerReadiness GetReadiness() =>
+            new(true, "authenticated_ipc_missing", true, true, false);
+
+        public Task<TerminalProcessRunResult> RunAsync(
+            TerminalProcessLaunchRequest request,
+            Action<int> onProcessStarted,
+            CancellationToken cancellationToken)
+        {
+            WasCalled = true;
+            throw new Xunit.Sdk.XunitException("incomplete isolated host must not execute");
         }
     }
 }
