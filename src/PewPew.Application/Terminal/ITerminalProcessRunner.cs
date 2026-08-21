@@ -27,7 +27,8 @@ public sealed record TerminalProcessLaunchRequest(
     string WorkingDirectory,
     WorkerResourceQuota Quota,
     IReadOnlyDictionary<string, string>? Environment = null,
-    IsolatedTerminalWorkerBinding? Binding = null);
+    IsolatedTerminalWorkerBinding? Binding = null,
+    string? ExpectedExecutableSha256Hash = null);
 
 /// <summary>
 /// Metadata-only process result. Output content is intentionally not retained by

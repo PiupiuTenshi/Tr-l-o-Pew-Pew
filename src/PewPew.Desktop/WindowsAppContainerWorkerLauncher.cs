@@ -21,12 +21,36 @@ public sealed class WindowsAppContainerWorkerLauncher
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workerExecutablePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
+        return LaunchCore(workerExecutablePath, Path.GetDirectoryName(Path.GetFullPath(workerExecutablePath)), [pipeName]);
+    }
+
+    /// <summary>
+    /// Directly launches one prevalidated workload in the no-capability
+    /// AppContainer. Desktop retains the only process handle and Job Object;
+    /// no workload IPC endpoint is created.
+    /// </summary>
+    public static LaunchedAppContainerWorker LaunchDirect(
+        string executablePath,
+        string workingDirectory,
+        IReadOnlyList<string> arguments)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
+        ArgumentNullException.ThrowIfNull(arguments);
+        return LaunchCore(executablePath, workingDirectory, arguments);
+    }
+
+    private static LaunchedAppContainerWorker LaunchCore(
+        string executablePath,
+        string? workingDirectory,
+        IReadOnlyList<string> arguments)
+    {
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException("appcontainer_not_supported");
         }
 
-        var fullPath = Path.GetFullPath(workerExecutablePath);
+        var fullPath = Path.GetFullPath(executablePath);
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException("isolated_terminal_worker_executable_missing", fullPath);
@@ -79,7 +103,7 @@ public sealed class WindowsAppContainerWorkerLauncher
                 StartupInfo = new StartupInfo { Cb = Marshal.SizeOf<StartupInfoEx>() },
                 AttributeList = attributeList
             };
-            var commandLine = ($"\"{fullPath}\" \"{pipeName}\"\0").ToCharArray();
+            var commandLine = (BuildCommandLine(fullPath, arguments) + "\0").ToCharArray();
             if (!CreateProcess(
                     null,
                     commandLine,
@@ -88,7 +112,7 @@ public sealed class WindowsAppContainerWorkerLauncher
                     false,
                     ExtendedStartupInfoPresent | CreateSuspended,
                     IntPtr.Zero,
-                    Path.GetDirectoryName(fullPath),
+                    Path.GetFullPath(workingDirectory ?? throw new InvalidOperationException("appcontainer_working_directory_missing")),
                     ref startup,
                     out var processInformation))
             {
@@ -129,6 +153,47 @@ public sealed class WindowsAppContainerWorkerLauncher
                 FreeSid(appContainerSid);
             }
         }
+    }
+
+    private static string BuildCommandLine(string executablePath, IReadOnlyList<string> arguments) =>
+        string.Join(" ", new[] { QuoteArgument(executablePath) }.Concat(arguments.Select(QuoteArgument)));
+
+    // Mirrors CommandLineToArgvW quoting semantics. This is process argument
+    // construction, never a shell command line.
+    private static string QuoteArgument(string argument)
+    {
+        ArgumentNullException.ThrowIfNull(argument);
+        if (argument.Length > 0 && argument.IndexOfAny([' ', '\t', '"']) < 0)
+        {
+            return argument;
+        }
+
+        var value = new System.Text.StringBuilder("\"");
+        var slashCount = 0;
+        foreach (var character in argument)
+        {
+            if (character == '\\')
+            {
+                slashCount++;
+                continue;
+            }
+
+            if (character == '"')
+            {
+                value.Append('\\', slashCount * 2 + 1);
+                value.Append(character);
+                slashCount = 0;
+                continue;
+            }
+
+            value.Append('\\', slashCount);
+            slashCount = 0;
+            value.Append(character);
+        }
+
+        value.Append('\\', slashCount * 2);
+        value.Append('"');
+        return value.ToString();
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -227,9 +292,34 @@ public sealed class LaunchedAppContainerWorker : IDisposable
 
     public void TerminateForSecurityStop() => _job.TerminateForSecurityStop();
 
+    public async Task<int> WaitForExitAsync(CancellationToken cancellationToken)
+    {
+        using var registration = cancellationToken.Register(TerminateForSecurityStop);
+        var wait = await Task.Run(
+            () => WaitForSingleObject(_processHandle, uint.MaxValue),
+            CancellationToken.None).ConfigureAwait(false);
+        if (wait != 0)
+        {
+            throw new TerminalProcessBoundaryViolationException("appcontainer_workload_wait_failed");
+        }
+
+        if (!GetExitCodeProcess(_processHandle, out var exitCode))
+        {
+            throw new TerminalProcessBoundaryViolationException("appcontainer_workload_exit_code_unavailable");
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        return unchecked((int)exitCode);
+    }
+
     public void Dispose()
     {
         _job.Dispose();
         _processHandle.Dispose();
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForSingleObject(SafeFileHandle handle, uint milliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(SafeFileHandle process, out uint exitCode);
 }

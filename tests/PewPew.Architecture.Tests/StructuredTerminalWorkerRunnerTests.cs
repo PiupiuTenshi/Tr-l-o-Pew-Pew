@@ -84,7 +84,8 @@ public sealed class StructuredTerminalWorkerRunnerTests
     [Fact]
     public async Task BuildWorkflowBindsRealPidAndReturnsMetadataOnlySuccessEvidence()
     {
-        var workflow = ActiveWorkflow("dotnet_build", ["build"]);
+        var executableHash = new string('b', 64);
+        var workflow = ActiveWorkflow("dotnet_build", ["build"], executableHash);
         var worker = RunningWorker();
         var runner = new StubProcessRunner(new TerminalProcessRunResult(0, 42, false, 30, TimeSpan.FromMilliseconds(12)));
 
@@ -102,6 +103,7 @@ public sealed class StructuredTerminalWorkerRunnerTests
         Assert.DoesNotContain("build output", outcome.VerificationEvidence, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("dotnet", runner.Request!.ExecutablePath);
         Assert.Equal(["build"], runner.Request.Arguments);
+        Assert.Equal(executableHash, runner.Request.ExpectedExecutableSha256Hash);
     }
 
     [Fact]
@@ -179,7 +181,10 @@ public sealed class StructuredTerminalWorkerRunnerTests
         Assert.DoesNotContain("sensitive", outcome.FailureReason, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static TerminalWorkflowDefinition ActiveWorkflow(string name, IReadOnlyList<string> arguments)
+    private static TerminalWorkflowDefinition ActiveWorkflow(
+        string name,
+        IReadOnlyList<string> arguments,
+        string? expectedExecutableSha256Hash = null)
     {
         var now = DateTimeOffset.UtcNow;
         var workflow = TerminalWorkflowService.CreateDraft(
@@ -190,6 +195,7 @@ public sealed class StructuredTerminalWorkerRunnerTests
             arguments,
             Array.Empty<string>(),
             TerminalWorkflowRiskLevel.Medium,
+            expectedExecutableSha256Hash: expectedExecutableSha256Hash,
             nowUtc: now);
         workflow.Submit(now.AddSeconds(1));
         Assert.True(workflow.Approve(workflow.ExpectedSha256Hash, now.AddSeconds(2)));
@@ -275,7 +281,7 @@ public sealed class StructuredTerminalWorkerRunnerTests
         public bool WasCalled { get; private set; }
 
         public IsolatedTerminalWorkerReadiness GetReadiness() =>
-            new(true, "authenticated_ipc_missing", true, true, false);
+            new(true, "authenticated_local_control_missing", true, true, false);
 
         public Task<TerminalProcessRunResult> RunAsync(
             TerminalProcessLaunchRequest request,

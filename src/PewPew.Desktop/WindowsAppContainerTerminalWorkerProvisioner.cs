@@ -45,15 +45,15 @@ public sealed class WindowsAppContainerTerminalWorkerProvisioner : IWindowsAppCo
             return new(false, "appcontainer_worker_directory_acl_missing", true, false, false);
         }
 
-        // The current task has not yet installed the broker or Job Object host.
+        // The current task has not yet installed the direct launcher or Job Object host.
         // Therefore readiness stays false and the execution boundary remains closed.
-        return new(false, "isolated_terminal_worker_broker_unavailable", true, false, false);
+        return new(false, "isolated_terminal_workload_launcher_unavailable", true, false, false);
     }
 
     /// <summary>
     /// Creates the no-capability AppContainer profile and grants its SID Modify
     /// rights only within the approved worker directory. This does not make the
-    /// terminal host ready because it does not create a broker or Job Object.
+    /// terminal host ready because it does not create a direct launcher or Job Object.
     /// </summary>
     public AppContainerTerminalWorkerProvisioningResult Provision()
     {

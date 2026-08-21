@@ -9,6 +9,24 @@ if (args.Length == 1 && string.Equals(args[0], "--pewpew-child-fixture", StringC
     return WorkerIsolation.IsCurrentProcessAppContainer() ? 0 : 77;
 }
 
+// P03-T27 manual fixtures exercise only direct AppContainer ownership. They
+// accept no user-controlled command and never create a child process.
+if (args.Length == 1 && string.Equals(args[0], "--pewpew-direct-fixture", StringComparison.Ordinal))
+{
+    return WorkerIsolation.IsCurrentProcessAppContainer() ? 0 : 77;
+}
+
+if (args.Length == 1 && string.Equals(args[0], "--pewpew-direct-cancellation-fixture", StringComparison.Ordinal))
+{
+    if (!WorkerIsolation.IsCurrentProcessAppContainer())
+    {
+        return 77;
+    }
+
+    await Task.Delay(Timeout.InfiniteTimeSpan).ConfigureAwait(false);
+    return 78;
+}
+
 if (args.Length != 1 || string.IsNullOrWhiteSpace(args[0]))
 {
     return 64;
